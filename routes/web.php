@@ -140,7 +140,8 @@ Route::delete('/api/customerlicense/{id}', function ($id, Request $request) {
 Route::get('/api/customerlicense/{id}/vo', function ($id) {
     $m = CustomerLicense::query()->where('order_id',$id)->first();
     if (!$m) return response()->json(['message'=>'Not found'],404);
-    return response()->json(['seconds' => $m->vo_seconds_remaining]);
+    $sec = (int)($m->vo_seconds_remaining ?? 0);
+    return response()->json(['ok'=>true,'orderId'=>$id,'seconds' => $sec, 'minutes' => (int)ceil($sec/60.0)]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::post('/api/customerlicense/{id}/vo/topup', function ($id, Request $request) {
@@ -151,19 +152,21 @@ Route::post('/api/customerlicense/{id}/vo/topup', function ($id, Request $reques
     $m->vo_seconds_remaining = ($m->vo_seconds_remaining ?? 0) + $add;
     $m->save();
     VoiceOverTransaction::create(['license_id'=>$m->id,'type'=>'topup','seconds'=>$add]);
-    return response()->json(['seconds_remaining' => $m->vo_seconds_remaining]);
+    $sec = (int)($m->vo_seconds_remaining ?? 0);
+    return response()->json(['ok'=>true,'orderId'=>$id,'seconds_remaining' => $sec, 'minutes_remaining' => (int)ceil($sec/60.0)]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::post('/api/customerlicense/{id}/vo/debit', function ($id, Request $request) {
     $m = CustomerLicense::query()->where('order_id',$id)->first();
+    if (!$m) { $m = CustomerLicense::query()->where('license_key',$id)->first(); }
     if (!$m) return response()->json(['message'=>'Not found'],404);
-    $use = (int)($request->input('secondsUsed') ?? 0);
+    $use = (int)($request->input('secondsUsed') ?? $request->input('charsVo') ?? 0);
     $use = max(0,$use);
     $debited = min($use, $m->vo_seconds_remaining ?? 0);
     $m->vo_seconds_remaining = max(0, ($m->vo_seconds_remaining ?? 0) - $debited);
     $m->save();
     VoiceOverTransaction::create(['license_id'=>$m->id,'type'=>'debit','seconds'=>$debited]);
-    return response()->json(['seconds_remaining' => $m->vo_seconds_remaining, 'seconds_debited' => $debited]);
+    return response()->json(['ok'=>true,'license'=>$id,'seconds_remaining' => (int)($m->vo_seconds_remaining ?? 0), 'seconds_debited' => (int)$debited]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::post('/api/customerlicense/{id}/activate', function ($id, Request $request) {
@@ -413,4 +416,92 @@ Route::post('/api/license/generate', function (Request $request) {
         DB::table('license_actions')->insert(['license_key'=>$newKey,'order_id'=>null,'email'=>$email,'action'=>'Generate','result'=>'Failed','message'=>'Exception: '.$ex->getMessage(),'created_at'=>now(),'updated_at'=>now()]);
         return response()->json(['Success'=>false,'Message'=>'Terjadi kesalahan internal.','ErrorCode'=>'INTERNAL_ERROR'],500);
     }
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::get('/api/voice/{license}/voice-config', function ($license) {
+    $lic = CustomerLicense::query()->where('license_key',$license)->first();
+    if (!$lic) return response()->json(['ok'=>false,'message'=>'Not found'],404);
+    $remain = (int)($lic->vo_seconds_remaining ?? 0);
+    if ($remain <= 0) {
+        return response()->json([
+            'ok' => false,
+            'license' => $license,
+            'message' => 'Silakan topup dulu',
+        ],402);
+    }
+    $items = DB::table('ConfigApiKey')
+        ->whereRaw('LOWER(status) = ?', ['available'])
+        ->whereNotNull('ApiKey')
+        ->where('ApiKey','<>','')
+        ->orderByDesc('UpdatedAt')
+        ->select(['JenisApiKey','ApiKey','DefaultVoiceId'])
+        ->get()
+        ->map(function($x) use ($remain){
+            return [
+                'Provider' => $x->JenisApiKey,
+                'ApiKey' => $x->ApiKey,
+                'DefaultVoiceId' => $x->DefaultVoiceId,
+                'SecondsRemaining' => $remain,
+            ];
+        });
+    return response()->json([
+        'ok' => true,
+        'license' => $license,
+        'seconds_remaining' => $remain,
+        'apikeys' => $items,
+    ]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::get('/api/voice/{license}/vo/status', function ($license) {
+    $lic = CustomerLicense::query()->where('license_key',$license)->first();
+    if (!$lic) return response()->json(['message'=>'Not found'],404);
+    return response()->json([
+        'ok' => true,
+        'license' => $license,
+        'seconds_remaining' => (int)($lic->vo_seconds_remaining ?? 0),
+    ]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::get('/api/customerlicense/{license}/vo/status', function ($license) {
+    $lic = CustomerLicense::query()->where('license_key',$license)->first();
+    if (!$lic) return response()->json(['message'=>'Not found'],404);
+    return response()->json([
+        'ok' => true,
+        'license' => $license,
+        'seconds_remaining' => (int)($lic->vo_seconds_remaining ?? 0),
+    ]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::get('/api/customerlicense/{license}/voice-config', function ($license) {
+    $lic = CustomerLicense::query()->where('license_key',$license)->first();
+    if (!$lic) return response()->json(['ok'=>false,'message'=>'Not found'],404);
+    $remain = (int)($lic->vo_seconds_remaining ?? 0);
+    if ($remain <= 0) {
+        return response()->json([
+            'ok' => false,
+            'license' => $license,
+            'message' => 'Silakan topup dulu',
+        ],402);
+    }
+    $items = DB::table('ConfigApiKey')
+        ->whereRaw('LOWER(status) = ?', ['available'])
+        ->whereNotNull('ApiKey')
+        ->where('ApiKey','<>','')
+        ->orderByDesc('UpdatedAt')
+        ->select(['JenisApiKey','ApiKey','DefaultVoiceId'])
+        ->get()
+        ->map(function($x) use ($remain){
+            return [
+                'Provider' => $x->JenisApiKey,
+                'ApiKey' => $x->ApiKey,
+                'DefaultVoiceId' => $x->DefaultVoiceId,
+                'SecondsRemaining' => $remain,
+            ];
+        });
+    return response()->json([
+        'ok' => true,
+        'license' => $license,
+        'seconds_remaining' => $remain,
+        'apikeys' => $items,
+    ]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
