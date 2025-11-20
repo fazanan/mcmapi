@@ -1,0 +1,590 @@
+using System;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Web.Http;
+using System.Data.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using Newtonsoft.Json;
+using MaximalCuanLicense;
+using System.Configuration;
+
+public class LicenseController : ApiController
+{
+    private MaximalCuanDataContext _context;
+
+    public LicenseController()
+    {
+        // Inisialisasi LINQ to SQL DataContext
+        // Menggunakan connection string dari konfigurasi
+        string connectionString = ConfigurationManager.ConnectionStrings["MaximalCuanLicenseDBConnectionString"].ConnectionString;
+        _context = new MaximalCuanDataContext(connectionString);
+    }
+
+    [HttpPost]
+    [Route("api/license/generate")]
+    public IHttpActionResult GenerateLicense(GenerateRequest request)
+    {
+        // --- Basic validation ---
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Edition))
+        {
+            var resp = new ApiResponse<GenerateLicenseData>
+            {
+                Success = false,
+                Message = "Email dan Edition wajib diisi.",
+                ErrorCode = "INVALID_REQUEST"
+            };
+            return Content(HttpStatusCode.BadRequest, resp);
+        }
+
+        var edition = request.Edition.Trim();
+        var newLicenseKey = Guid.NewGuid().ToString().ToUpper();  // fallback untuk log jika belum ada key
+        int maxVideo;
+        int validityDays;
+        DateTime expiresDate;
+        License license = null;
+
+        try
+        {
+            // --- NEW license ---
+            if (!request.statusUpdrage)
+            {
+                if (string.Equals(edition, "Trial", StringComparison.OrdinalIgnoreCase))
+                {
+                    validityDays = request.ValidityDays ?? 7;
+                    maxVideo = 30;
+                }
+                else if (string.Equals(edition, "Basic", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(edition, "Pro", StringComparison.OrdinalIgnoreCase))
+                {
+                    validityDays = request.ValidityDays ?? 180;
+                    maxVideo = int.MaxValue;
+                }
+                else
+                {
+                    LogLicenseAction(newLicenseKey, null, request.Email, "Generate", "Failed",
+                        $"Edition {edition} tidak dikenal.");
+                    var bad = new ApiResponse<GenerateLicenseData>
+                    {
+                        Success = false,
+                        Message = "Edition tidak valid.",
+                        ErrorCode = "INVALID_EDITION"
+                    };
+                    return Content(HttpStatusCode.BadRequest, bad);
+                }
+
+                expiresDate = DateTime.UtcNow.AddDays(validityDays);
+
+                license = new License
+                {
+                    LicenseKey = newLicenseKey,
+                    Owner = request.Owner,
+                    Email = request.Email,
+                    Edition = edition,
+                    ExpiresAt = expiresDate,
+                    MaxSeats = request.MaxSeats ?? 1,
+                    Features = JsonConvert.SerializeObject(request.Features ?? new[] { "Batch", "TextOverlay" }),
+                    MaxVideo = maxVideo,
+                    Status = "InActive"
+                };
+
+                _context.Licenses.InsertOnSubmit(license);
+                _context.SubmitChanges();
+
+                LogLicenseAction(license.LicenseKey, null, request.Email, "Generate", "Success",
+                    $"License {edition} berhasil dibuat, berlaku sampai {license.ExpiresAt:yyyy-MM-dd}.");
+
+                var ok = new ApiResponse<GenerateLicenseData>
+                {
+                    Success = true,
+                    Message = "License generated.",
+                    Data = new GenerateLicenseData
+                    {
+                        LicenseKey = license.LicenseKey,
+                        Email = license.Email,
+                        Edition = license.Edition,
+                        //ExpiresAt = license.ExpiresAt,
+                        //MaxSeats = license.MaxSeats,
+                        //MaxVideo = license.MaxVideo,
+                        Status = license.Status
+                    }
+                };
+                return Content(HttpStatusCode.OK, ok);
+            }
+
+            // --- UPGRADE existing license ---
+            license = _context.Licenses.SingleOrDefault(l => l.Email == request.Email && l.Status == "Active");
+            if (license == null)
+            {
+                LogLicenseAction(newLicenseKey, null, request.Email, "Generate", "Failed",
+                    "Tidak ada license aktif untuk upgrade.");
+                var bad = new ApiResponse<GenerateLicenseData>
+                {
+                    Success = false,
+                    Message = "Tidak ada license aktif untuk upgrade.",
+                    ErrorCode = "NO_ACTIVE_LICENSE"
+                };
+                return Content(HttpStatusCode.BadRequest, bad);
+            }
+
+            if (string.Equals(edition, "Basic", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(edition, "Pro", StringComparison.OrdinalIgnoreCase))
+            {
+                validityDays = request.ValidityDays ?? 180;
+                maxVideo = int.MaxValue;
+                expiresDate = DateTime.UtcNow.AddDays(validityDays);
+
+                license.Edition = edition;
+                license.ExpiresAt = expiresDate;
+                license.MaxSeats = request.MaxSeats ?? license.MaxSeats;
+                license.MaxVideo = maxVideo;
+                license.Features = JsonConvert.SerializeObject(request.Features ?? new[] { "Batch", "TextOverlay" });
+
+                _context.SubmitChanges();
+
+                LogLicenseAction(license.LicenseKey, null, request.Email, "Generate", "Success",
+                    $"License di-upgrade menjadi {edition}, berlaku sampai {license.ExpiresAt:yyyy-MM-dd}.");
+
+                var ok = new ApiResponse<GenerateLicenseData>
+                {
+                    Success = true,
+                    Message = "License upgraded.",
+                    Data = new GenerateLicenseData
+                    {
+                        LicenseKey = license.LicenseKey,
+                        Email = license.Email,
+                        Edition = license.Edition,
+                        //ExpiresAt = license.ExpiresAt,
+                        //MaxSeats = license.MaxSeats,
+                        //MaxVideo = license.MaxVideo,
+                        Status = license.Status
+                    }
+                };
+                return Content(HttpStatusCode.OK, ok);
+            }
+            else
+            {
+                LogLicenseAction(license.LicenseKey, null, request.Email, "Generate", "Failed",
+                    $"Edition {edition} tidak valid untuk upgrade.");
+                var bad = new ApiResponse<GenerateLicenseData>
+                {
+                    Success = false,
+                    Message = "Edition tidak valid untuk upgrade.",
+                    ErrorCode = "INVALID_UPGRADE_EDITION"
+                };
+                return Content(HttpStatusCode.BadRequest, bad);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogLicenseAction(license?.LicenseKey ?? newLicenseKey, null, request.Email, "Generate", "Failed",
+                $"Exception: {ex.Message}");
+
+            var err = new ApiResponse<GenerateLicenseData>
+            {
+                Success = false,
+                Message = "Terjadi kesalahan internal.",
+                ErrorCode = "INTERNAL_ERROR"
+            };
+            return Content(HttpStatusCode.InternalServerError, err);
+        }
+    }
+
+
+
+    [HttpPost]
+    [Route("api/license/activate")]
+    public IHttpActionResult ActivateLicense(ActivateRequest request)
+    {
+        // --- Basic validation ---
+        if (request == null ||
+            string.IsNullOrWhiteSpace(request.LicenseKey) ||
+            string.IsNullOrWhiteSpace(request.Email) ||
+            string.IsNullOrWhiteSpace(request.MachineId) ||
+            string.IsNullOrWhiteSpace(request.Signature))
+        {
+            var bad = new ApiResponse<ActivateLicenseData>
+            {
+                Success = false,
+                Message = "LicenseKey, Email, MachineId, dan Signature wajib diisi.",
+                ErrorCode = "INVALID_REQUEST"
+            };
+            return Content(HttpStatusCode.BadRequest, bad);
+        }
+
+        var key = request.LicenseKey.Trim();
+        var mid = request.MachineId.Trim();
+        var email = request.Email.Trim();
+
+        try
+        {
+            var license = _context.Licenses.FirstOrDefault(l => l.LicenseKey == key);
+            if (license == null)
+            {
+                LogLicenseAction(key, mid, email, "Activate", "Failed", "License not found.");
+                return Content(HttpStatusCode.BadRequest, new ApiResponse<ActivateLicenseData>
+                {
+                    Success = false,
+                    Message = "License not found.",
+                    ErrorCode = "LICENSE_NOT_FOUND"
+                });
+            }
+
+            if (DateTime.UtcNow > license.ExpiresAt)
+            {
+                LogLicenseAction(key, mid, email, "Activate", "Failed", "License expired.");
+                return Content(HttpStatusCode.BadRequest, new ApiResponse<ActivateLicenseData>
+                {
+                    Success = false,
+                    Message = "License expired.",
+                    ErrorCode = "LICENSE_EXPIRED"
+                });
+            }
+
+            if (!string.Equals(license.Email, email, StringComparison.OrdinalIgnoreCase))
+            {
+                LogLicenseAction(key, mid, email, "Activate", "Failed", "Email tidak sesuai.");
+                return Content(HttpStatusCode.BadRequest, new ApiResponse<ActivateLicenseData>
+                {
+                    Success = false,
+                    Message = "Email tidak sesuai.",
+                    ErrorCode = "EMAIL_MISMATCH"
+                });
+            }
+
+            // Signature check
+            var expectedSignature = GenerateSimpleToken(key, mid, email);
+            if (!string.Equals(request.Signature, expectedSignature, StringComparison.Ordinal))
+            {
+                LogLicenseAction(key, mid, email, "Activate", "Failed", "Signature tidak valid.");
+                return Content(HttpStatusCode.BadRequest, new ApiResponse<ActivateLicenseData>
+                {
+                    Success = false,
+                    Message = "Signature tidak valid.",
+                    ErrorCode = "INVALID_SIGNATURE"
+                });
+            }
+
+
+            if (license.IsActivated != null)
+            {
+                if (license.IsActivated.Value)
+                {
+                    LogLicenseAction(key, mid, email, "Activate", "Failed", "License sudah aktif dan masih berlaku.");
+                    return Content(HttpStatusCode.BadRequest, new ApiResponse<ActivateLicenseData>
+                    {
+                        Success = false,
+                        Message = "License sudah aktif dan masih berlaku.",
+                        ErrorCode = "LICENSE_ALREADY_ACTIVE"
+                    });
+                }
+            }
+
+            DateTime? expires = null;
+            if (license.Status != null)
+            {
+                if (license.Status == "InActive")
+                {
+                    int days = (license.TenorDays ?? 1);
+                    expires = string.Equals(license.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase)
+                                   ? (DateTime?)DateTime.UtcNow.AddDays(days)
+                                   : license.ExpiresAt;
+                }
+                else if (license.Status == "Reset" || license.Status == "Active")
+                {
+                    // Jika status Reset, gunakan tanggal kadaluarsa yang sudah ada
+                    expires = license.ExpiresAt;
+                }
+            }
+
+
+            // Set status license jadi Active
+            license.Status = "Active";
+            license.MaxhineId = mid; // Simpan ID mesin yang mengaktifkan
+            license.ActivationDate = DateTime.UtcNow;
+            license.IsActivated = true;
+            license.ExpiresAt = expires; // Tetapkan tanggal kadaluarsa
+            _context.SubmitChanges();
+
+            LogLicenseAction(key, mid, email, "Activate", "Success", "License activated.");
+
+            var ok = new ApiResponse<ActivateLicenseData>
+            {
+                Success = true,
+                Message = "License activated.",
+                Data = new ActivateLicenseData
+                {
+                    LicenseKey = license.LicenseKey,
+                    Email = email,
+                    MachineId = mid,
+                    ExpiresAt = license.ExpiresAt.Value,
+                    Status = license.Status,
+                    Edition = license.Edition
+                }
+            };
+            return Content(HttpStatusCode.OK, ok);
+        }
+        catch (Exception ex)
+        {
+            LogLicenseAction(key, mid, email, "Activate", "Failed", $"Exception: {ex.Message}");
+            return Content(HttpStatusCode.InternalServerError, new ApiResponse<ActivateLicenseData>
+            {
+                Success = false,
+                Message = "Terjadi kesalahan internal.",
+                ErrorCode = "INTERNAL_ERROR"
+            });
+        }
+    }
+
+
+    [HttpPost]
+    [Route("api/license/reset")]
+    public IHttpActionResult ResetActivation(ActivateRequest request)
+    {
+        // --- Basic validation ---
+        if (request == null ||
+            string.IsNullOrWhiteSpace(request.LicenseKey) ||
+            string.IsNullOrWhiteSpace(request.Email) ||
+            string.IsNullOrWhiteSpace(request.Signature))
+        {
+            LogLicenseAction(request?.LicenseKey, request?.MachineId, request?.Email, "Reset", "Failed",
+                "LicenseKey, Email, dan Signature wajib diisi.");
+
+            return Content(HttpStatusCode.BadRequest, new ApiResponse<ResetActivationData>
+            {
+                Success = false,
+                Message = "LicenseKey, Email, dan Signature wajib diisi.",
+                ErrorCode = "INVALID_REQUEST"
+            });
+        }
+
+        try
+        {
+            // Validasi license & email
+            var license = _context.Licenses.SingleOrDefault(p => p.LicenseKey == request.LicenseKey);
+            if (license == null)
+            {
+                LogLicenseAction(request.LicenseKey, request.MachineId, request.Email, "Reset", "Failed",
+                    "License not found.");
+
+                return Content(HttpStatusCode.BadRequest, new ApiResponse<ResetActivationData>
+                {
+                    Success = false,
+                    Message = "License not found.",
+                    ErrorCode = "LICENSE_NOT_FOUND"
+                });
+            }
+
+            if (!string.Equals(license.Email, request.Email, StringComparison.OrdinalIgnoreCase))
+            {
+                LogLicenseAction(request.LicenseKey, request.MachineId, request.Email, "Reset", "Failed",
+                    "Email tidak sesuai dengan pemilik license.");
+
+                return Content(HttpStatusCode.BadRequest, new ApiResponse<ResetActivationData>
+                {
+                    Success = false,
+                    Message = "Email tidak sesuai dengan pemilik license.",
+                    ErrorCode = "EMAIL_MISMATCH"
+                });
+            }
+
+            // Verifikasi Signature (pakai pola sama dengan aktivasi)
+            var expectedSignature = GenerateSimpleToken(request.LicenseKey, request.MachineId ?? string.Empty, request.Email);
+            if (!string.Equals(request.Signature, expectedSignature, StringComparison.Ordinal))
+            {
+                LogLicenseAction(request.LicenseKey, request.MachineId, request.Email, "Reset", "Failed",
+                    "Invalid license token.");
+
+                return Content(HttpStatusCode.BadRequest, new ApiResponse<ResetActivationData>
+                {
+                    Success = false,
+                    Message = "Invalid license token.",
+                    ErrorCode = "INVALID_SIGNATURE"
+                });
+            }
+
+            // Query target machines
+            var l = _context.Licenses.Where(m => m.LicenseKey == request.LicenseKey && m.Email == request.Email && m.MaxhineId == request.MachineId).FirstOrDefault();
+            //if (!string.IsNullOrWhiteSpace(request.MachineId))
+            //    l = l.Where(m => m.MaxhineId == request.MachineId);
+
+            if (l == null)
+            {
+
+                LogLicenseAction(request.LicenseKey, request.MachineId, request.Email, "Reset", "Failed",
+                    "Informasi license atau mesin salah, gagal direset atau license sudah direset.");
+
+                return Content(HttpStatusCode.BadRequest, new ApiResponse<ResetActivationData>
+                {
+                    Success = false,
+                    Message = "Informasi license atau mesin salah atau sudah direset",
+                    ErrorCode = "FAILED"
+                });
+            }
+            else
+            {
+                l.Status = "Reset"; // Set status license menjadi Reset 
+                l.MaxhineId = null; // Hapus ID mesin yang terikat
+                l.ActivationDate = null; // Hapus tanggal aktivasi
+                l.IsActivated = false; // Set IsActivated ke false
+            }
+            
+
+            _context.SubmitChanges();
+
+            LogLicenseAction(request.LicenseKey, request.MachineId, request.Email, "Reset", "Success",
+                $"Reset berhasil silakan aktivasi kembali.");
+
+            return Content(HttpStatusCode.OK, new ApiResponse<ResetActivationData>
+            {
+                Success = true,
+                Message = "ResetDone",
+                Data = new ResetActivationData
+                {
+                    LicenseKey = request.LicenseKey,
+                    Email = request.Email,
+                    MachineId = request.MachineId,
+                    DeletedCount = 1,
+                    LicenseStatus = license.Status
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            LogLicenseAction(request.LicenseKey, request.MachineId, request.Email, "Reset", "Failed",
+                $"Exception: {ex.Message}");
+
+            return Content(HttpStatusCode.InternalServerError, new ApiResponse<ResetActivationData>
+            {
+                Success = false,
+                Message = "Terjadi kesalahan internal.",
+                ErrorCode = "INTERNAL_ERROR"
+            });
+        }
+    }
+
+
+
+
+    // GET: api/license/sign?licenseKey=...&machineId=...
+    [HttpGet]
+    [Route("api/license/sign")]
+    public IHttpActionResult Sign(string licenseKey, string machineId, string email)
+    {
+        if (string.IsNullOrWhiteSpace(licenseKey) || string.IsNullOrWhiteSpace(machineId))
+            return BadRequest("licenseKey & machineId required.");
+
+        // Pakai fungsi yang sama dengan Activate
+        var sig = GenerateSimpleToken(licenseKey, machineId, email);
+        return Ok(new { signature = sig });
+    }
+
+
+    // Menggunakan SHA256 untuk membuat signature
+    private string GenerateSimpleToken(string licenseKey, string machineId, string email)
+    {
+        var data = $"{licenseKey}|{machineId}|{email}"; // Data untuk verifikasi
+        using (var sha256 = SHA256.Create())
+        {
+            byte[] tokenBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(data));
+            return Convert.ToBase64String(tokenBytes);
+        }
+    }
+
+    private void LogLicenseAction(string licenseKey, string machineId, string email, string action, string status, string message)
+    {
+        MaximalCuanDataContext _context = new MaximalCuanDataContext(ConfigurationManager.ConnectionStrings["MaximalCuanLicenseDBConnectionString"].ConnectionString);
+        MaximalCuanLicense.LogLicense logLicense = new MaximalCuanLicense.LogLicense
+        {
+            LicenseKey = licenseKey,
+            MachineId = machineId,
+            Email = email,
+            Action = action,
+            Status = status,
+            Message = message,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.LogLicenses.InsertOnSubmit(logLicense);
+        _context.SubmitChanges();
+    }
+
+
+    public class LogLicense
+    {
+        public int Id { get; set; }
+        public string LicenseKey { get; set; }
+        public string MachineId { get; set; }
+        public string Email { get; set; }
+        public string Action { get; set; }
+        public string Status { get; set; }
+        public string Message { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public class GenerateRequest
+    {
+        public string Owner { get; set; }  // Nama pemilik lisensi
+        public string Email { get; set; }  // Email pemilik lisensi
+        public string Edition { get; set; } // Edisi lisensi (misal: Pro, Enterprise)
+        public string[] Features { get; set; } // Fitur-fitur yang diaktifkan dalam lisensi
+        public int? ValidityDays { get; set; } // Jumlah hari berlaku lisensi
+        public int? MaxSeats { get; set; } // Jumlah maksimum mesin yang bisa menggunakan lisensi
+        public bool statusUpdrage { get; set; } // Status upgrade lisensi
+    }
+
+
+    public class ActivateRequest
+    {
+        public string Email { get; set; } // ID unik mesin (CPU, Disk, MAC, dll)
+        public string LicenseKey { get; set; } // Kunci lisensi yang akan diaktifkan
+        public string MachineId { get; set; } // ID unik mesin (CPU, Disk, MAC, dll)
+        public string Signature { get; set; } // Tanda tangan digital untuk verifikasi
+    }
+
+
+    public class ApiResponse<T>
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+        public string ErrorCode { get; set; }   // optional
+        public T Data { get; set; }             // payload
+    }
+
+    public class GenerateLicenseData
+    {
+        public string LicenseKey { get; set; }
+        public string Email { get; set; }
+        public string Edition { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public int MaxSeats { get; set; }
+        public int MaxVideo { get; set; }
+        public string Status { get; set; }
+    }
+
+    public class ActivateLicenseData
+    {
+        public string LicenseKey { get; set; }
+        public string Email { get; set; }
+        public string MachineId { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public string Status { get; set; }   // Active / InActive / Reset
+        public string Edition { get; set; }
+    }
+
+    public class ResetActivationData
+    {
+        public string LicenseKey { get; set; }
+        public string Email { get; set; }
+        public string MachineId { get; set; }   // kalau reset spesifik mesin
+        public int DeletedCount { get; set; }
+        public string LicenseStatus { get; set; } // Active/InActive/Reset
+    }
+
+
+
+}
+
+
+

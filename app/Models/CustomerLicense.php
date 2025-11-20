@@ -1,0 +1,29 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class CustomerLicense extends Model
+{
+    use HasFactory, SoftDeletes;
+
+    protected $fillable = [
+        'order_id','license_key','owner','email','phone','edition','payment_status','product_name',
+        'tenor_days','is_activated','activation_date_utc','expires_at_utc','machine_id',
+        'max_seats','max_video','features','vo_seconds_remaining','status'
+    ];
+
+    protected $casts = [
+        'is_activated' => 'boolean',
+        'activation_date_utc' => 'datetime',
+        'expires_at_utc' => 'datetime',
+    ];
+
+    public function voiceOverTransactions()
+    {
+        return $this->hasMany(VoiceOverTransaction::class, 'license_id');
+    }
+}
