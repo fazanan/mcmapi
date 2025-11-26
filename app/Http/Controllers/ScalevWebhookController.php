@@ -25,6 +25,7 @@ class ScalevWebhookController extends Controller
     hash_hmac('sha256', $rawBody, $secret, true)
     );
 
+        Log::info("RAW BODY RECEIVED", ['body' => $rawBody]);
 
         // Debug log — bisa kamu hapus nanti
         Log::info("SCALEV SIGNATURE DEBUG", [
