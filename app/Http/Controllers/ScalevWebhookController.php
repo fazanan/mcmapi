@@ -9,66 +9,48 @@ class ScalevWebhookController extends Controller
 {
     public function handle(Request $request)
     {
-        $timestamp = $request->header('X-SCALEV-TIMESTAMP');
-        $signature = $request->header('X-SCALEV-SIGNATURE');
-        $secret = env('SCALEV_WEBHOOK_SECRET');
+        $secret     = env('SCALEV_WEBHOOK_SECRET');
+        $timestamp  = $request->header('X-SCALEV-TIMESTAMP');
+        $signature  = $request->header('X-SCALEV-SIGNATURE');
+        $rawBody    = $request->getContent();
+
+        // Cek header lengkap
         if (!$timestamp || !$signature) {
             return response()->json(['message' => 'Missing signature headers'], 400);
         }
-        $rawBody = $request->getContent();
-        $signedPayload = $timestamp.'.'.$rawBody;
-        $expectedSignature = hash_hmac('sha256', $signedPayload, (string)$secret);
-        if (!hash_equals($expectedSignature, (string)$signature)) {
-            Log::warning('Invalid Scalev signature');
+
+        // Format sesuai dokumentasi SCALEV:
+        // HMAC_SHA256( timestamp + "." + body , secret ) → lalu BASE64.encode(raw)
+        $expectedSignature = base64_encode(
+            hash_hmac('sha256', $timestamp . '.' . $rawBody, $secret, true)
+        );
+
+        // Debug log — bisa kamu hapus nanti
+        Log::info("SCALEV SIGNATURE DEBUG", [
+            'raw_body'          => $rawBody,
+            'timestamp_header'  => $timestamp,
+            'received_signature'=> $signature,
+            'calculated_signature' => $expectedSignature,
+        ]);
+
+        // Cocokkan signature
+        if (!hash_equals($expectedSignature, $signature)) {
             return response()->json(['message' => 'Invalid signature'], 400);
         }
-        $event = $request->input('event');
-        $data = $request->input('data');
-        if ($event === 'business.test_event') {
-            Log::info('Scalev Test Event Received');
-            return response()->json(['message' => 'Test OK'], 200);
-        }
-        switch ($event) {
-            case 'order.created':
-                $this->handleOrderCreated($data);
-                break;
-            case 'order.payment_status_changed':
-                $this->handlePaymentStatus($data);
-                break;
-            case 'order.status_changed':
-                $this->handleOrderStatus($data);
-                break;
-            default:
-                Log::info('Unhandled Scalev Event: '.$event);
-                break;
-        }
-        return response()->json(['status' => 'ok'], 200);
-    }
 
-    protected function handleOrderCreated($data)
-    {
-        Log::info('Order Created Event', is_array($data) ? $data : ['data' => $data]);
-        $orderId = $data['order_id'] ?? null;
-        $fullname = $data['destination_address']['fullname'] ?? null;
-        $phone = $data['destination_address']['phone'] ?? null;
-        $address = $data['destination_address']['address'] ?? null;
-        $total = $data['pricing']['grand_total'] ?? null;
-        Log::info('Order saved', compact('orderId','fullname','phone','address','total'));
-    }
+        // Signature benar → proses event
+        $json = json_decode($rawBody, true);
+        $event = $json['event'] ?? null;
 
-    protected function handlePaymentStatus($data)
-    {
-        Log::info('Payment Status Changed', is_array($data) ? $data : ['data' => $data]);
-        $orderId = $data['order_id'] ?? null;
-        $paymentStatus = $data['payment_status'] ?? null;
-        if ($paymentStatus === 'paid') {
+        if ($event === "business.test_event") {
+            return response()->json(['message' => 'Test event OK']);
         }
-    }
 
-    protected function handleOrderStatus($data)
-    {
-        Log::info('Order Status Changed', is_array($data) ? $data : ['data' => $data]);
-        $orderId = $data['order_id'] ?? null;
-        $status = $data['status'] ?? null;
+        if ($event === "order.created") {
+            // Lanjutkan proses order di sini...
+            Log::info("ORDER CREATED RECEIVED", $json);
+        }
+
+        return response()->json(['message' => 'OK']);
     }
 }
