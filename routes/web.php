@@ -6,6 +6,7 @@ use App\Models\CustomerLicense;
 use App\Models\VoiceOverTransaction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Http\Controllers\ScalevWebhookController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -451,6 +452,9 @@ Route::get('/api/voice/{license}/voice-config', function ($license) {
         'apikeys' => $items,
     ]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::post('/api/webhooks/scalev', [ScalevWebhookController::class,'handle'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::get('/api/voice/{license}/vo/status', function ($license) {
     $lic = CustomerLicense::query()->where('license_key',$license)->first();
