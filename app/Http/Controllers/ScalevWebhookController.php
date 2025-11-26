@@ -21,9 +21,11 @@ class ScalevWebhookController extends Controller
 
         // Format sesuai dokumentasi SCALEV:
         // HMAC_SHA256( timestamp + "." + body , secret ) → lalu BASE64.encode(raw)
-    $expectedSignature = base64_encode(
+   $signature = $request->header('X-Scalev-Hmac-Sha256');
+$expectedSignature = base64_encode(
     hash_hmac('sha256', $rawBody, $secret, true)
-    );
+);
+
 
         Log::info("RAW BODY RECEIVED", ['body' => $rawBody]);
 
