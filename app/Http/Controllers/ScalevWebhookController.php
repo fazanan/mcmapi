@@ -21,9 +21,10 @@ class ScalevWebhookController extends Controller
 
         // Format sesuai dokumentasi SCALEV:
         // HMAC_SHA256( timestamp + "." + body , secret ) → lalu BASE64.encode(raw)
-        $expectedSignature = base64_encode(
-            hash_hmac('sha256', $timestamp . '.' . $rawBody, $secret, true)
-        );
+    $expectedSignature = base64_encode(
+    hash_hmac('sha256', $rawBody, $secret, true)
+    );
+
 
         // Debug log — bisa kamu hapus nanti
         Log::info("SCALEV SIGNATURE DEBUG", [
