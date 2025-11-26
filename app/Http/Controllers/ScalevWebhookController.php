@@ -10,39 +10,34 @@ class ScalevWebhookController extends Controller
     public function handle(Request $request)
     {
         $secret     = env('SCALEV_WEBHOOK_SECRET');
-        $timestamp  = $request->header('X-SCALEV-TIMESTAMP');
-        $signature  = $request->header('X-SCALEV-SIGNATURE');
         $rawBody    = $request->getContent();
 
-        // Cek header lengkap
-        if (!$timestamp || !$signature) {
-            return response()->json(['message' => 'Missing signature headers'], 400);
+        // Signature yang dikirim SCALEV
+        $receivedSignature = $request->header('X-Scalev-Hmac-Sha256');
+
+        if (!$receivedSignature) {
+            return response()->json(['message' => 'Missing signature header'], 400);
         }
 
-        // Format sesuai dokumentasi SCALEV:
-        // HMAC_SHA256( timestamp + "." + body , secret ) → lalu BASE64.encode(raw)
-   $signature = $request->header('X-Scalev-Hmac-Sha256');
-$expectedSignature = base64_encode(
-    hash_hmac('sha256', $rawBody, $secret, true)
-);
+        // SIGNATURE sesuai dokumentasi
+        // BASE64( HMAC_SHA256( RAW_BODY , SECRET ) )
+        $calculatedSignature = base64_encode(
+            hash_hmac('sha256', $rawBody, $secret, true)
+        );
 
-
-        Log::info("RAW BODY RECEIVED", ['body' => $rawBody]);
-
-        // Debug log — bisa kamu hapus nanti
-        Log::info("SCALEV SIGNATURE DEBUG", [
-            'raw_body'          => $rawBody,
-            'timestamp_header'  => $timestamp,
-            'received_signature'=> $signature,
-            'calculated_signature' => $expectedSignature,
+        // DEBUG
+        Log::info('SCALEV SIGNATURE CHECK', [
+            'raw_body' => $rawBody,
+            'received_signature' => $receivedSignature,
+            'calculated_signature' => $calculatedSignature
         ]);
 
         // Cocokkan signature
-        if (!hash_equals($expectedSignature, $signature)) {
+        if (!hash_equals($calculatedSignature, $receivedSignature)) {
             return response()->json(['message' => 'Invalid signature'], 400);
         }
 
-        // Signature benar → proses event
+        // Jika valid → proses event
         $json = json_decode($rawBody, true);
         $event = $json['event'] ?? null;
 
@@ -51,21 +46,9 @@ $expectedSignature = base64_encode(
         }
 
         if ($event === "order.created") {
-            // Lanjutkan proses order di sini...
             Log::info("ORDER CREATED RECEIVED", $json);
         }
 
-        
-
         return response()->json(['message' => 'OK']);
     }
-
-    public function dump(Request $request)
-    {
-        return response()->json([
-            'raw' => $request->getContent(),
-            'hmac' => base64_encode(hash_hmac("sha256", $request->getContent(), env("SCALEV_WEBHOOK_SECRET"), true)),
-        ]);
-    }
-
 }
