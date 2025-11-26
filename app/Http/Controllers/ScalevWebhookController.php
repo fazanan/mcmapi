@@ -52,6 +52,17 @@ class ScalevWebhookController extends Controller
             Log::info("ORDER CREATED RECEIVED", $json);
         }
 
+        
+
         return response()->json(['message' => 'OK']);
     }
+
+    public function dump(Request $request)
+    {
+        return response()->json([
+            'raw' => $request->getContent(),
+            'hmac' => base64_encode(hash_hmac("sha256", $request->getContent(), env("SCALEV_WEBHOOK_SECRET"), true)),
+        ]);
+    }
+
 }
