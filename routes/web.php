@@ -333,6 +333,8 @@ Route::get('/api/configapikey', function (Request $request) {
         ->orderByDesc('UpdatedAt')
         ->get();
     $items = $rows->map(function($x){
+        $cool = $x->CooldownUntilPT ? \Illuminate\Support\Carbon::parse($x->CooldownUntilPT)->toISOString() : null;
+        $upd = $x->UpdatedAt ? \Illuminate\Support\Carbon::parse($x->UpdatedAt)->toISOString() : null;
         return [
             'ApiKeyId' => $x->ApiKeyId ?? null,
             'JenisApiKey' => $x->JenisApiKey ?? null,
@@ -340,8 +342,8 @@ Route::get('/api/configapikey', function (Request $request) {
             'Model' => $x->Model ?? null,
             'DefaultVoiceId' => $x->DefaultVoiceId ?? null,
             'Status' => $x->Status ?? null,
-            'CooldownUntilPT' => optional($x->CooldownUntilPT)->toISOString(),
-            'UpdatedAt' => optional($x->UpdatedAt)->toISOString(),
+            'CooldownUntilPT' => $cool,
+            'UpdatedAt' => $upd,
         ];
     });
     return response()->json($items);
@@ -350,6 +352,8 @@ Route::get('/api/configapikey', function (Request $request) {
 Route::get('/api/configapikey/{id}', function ($id) {
     $x = DB::table('ConfigApiKey')->where('ApiKeyId',$id)->first();
     if (!$x) return response()->json(['message'=>'Not found'],404);
+    $cool = $x->CooldownUntilPT ? \Illuminate\Support\Carbon::parse($x->CooldownUntilPT)->toISOString() : null;
+    $upd = $x->UpdatedAt ? \Illuminate\Support\Carbon::parse($x->UpdatedAt)->toISOString() : null;
     return response()->json([
         'ApiKeyId' => $x->ApiKeyId ?? null,
         'JenisApiKey' => $x->JenisApiKey ?? null,
@@ -357,8 +361,8 @@ Route::get('/api/configapikey/{id}', function ($id) {
         'Model' => $x->Model ?? null,
         'DefaultVoiceId' => $x->DefaultVoiceId ?? null,
         'Status' => $x->Status ?? null,
-        'CooldownUntilPT' => optional($x->CooldownUntilPT)->toISOString(),
-        'UpdatedAt' => optional($x->UpdatedAt)->toISOString(),
+        'CooldownUntilPT' => $cool,
+        'UpdatedAt' => $upd,
     ]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 

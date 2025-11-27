@@ -47,7 +47,7 @@ class TestApiKeysJob implements ShouldQueue
                     ]);
                 } else if ($code === 429) {
                     DB::table('ConfigApiKey')->where('ApiKeyId',$row->ApiKeyId)->update([
-                        'Status' => 'KENA LIMIT',
+                        'Status' => 'COOLDOWN',
                         'CooldownUntilPT' => now('UTC')->addMinutes(5),
                         'UpdatedAt' => now('UTC'),
                     ]);

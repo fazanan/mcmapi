@@ -15,7 +15,7 @@ class CheckApiKeyCooldownJob implements ShouldQueue
 
     public function handle()
     {
-        $now = now();
+        $now = now('UTC');
 
         // Ambil semua key yang sedang cooldown
         $keys = DB::table('ConfigApiKey')
