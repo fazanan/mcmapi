@@ -63,20 +63,24 @@ class ScalevWebhookController extends Controller
                 try { $createdDb = Carbon::parse($createdAt)->setTimezone('UTC')->format('Y-m-d H:i:s'); } catch (\Throwable $e) { $createdDb = null; }
             }
             if ($orderId) {
-                DB::table('OrderData')->updateOrInsert(
-                    ['OrderId' => $orderId],
-                    [
-                        'Email' => $email,
-                        'Phone' => $phone,
-                        'Name' => $name,
-                        'ProductName' => $productName,
-                        'VariantPrice' => $variantPrice,
-                        'NetRevenue' => $netRevenue,
-                        'Status' => 'Not Paid',
-                        'CreatedAt' => $createdDb ?? now('UTC'),
-                        'UpdatedAt' => now('UTC'),
-                    ]
-                );
+                try {
+                    DB::table('OrderData')->updateOrInsert(
+                        ['OrderId' => $orderId],
+                        [
+                            'Email' => $email,
+                            'Phone' => $phone,
+                            'Name' => $name,
+                            'ProductName' => $productName,
+                            'VariantPrice' => $variantPrice,
+                            'NetRevenue' => $netRevenue,
+                            'Status' => 'Not Paid',
+                            'CreatedAt' => $createdDb ?? now('UTC'),
+                            'UpdatedAt' => now('UTC'),
+                        ]
+                    );
+                } catch (\Throwable $e) {
+                    Log::error('OrderData upsert failed: '.$e->getMessage());
+                }
             }
         }
 
