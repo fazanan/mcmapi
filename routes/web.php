@@ -20,6 +20,10 @@ Route::get('/config-keys', function () {
     return view('configapikey.index');
 });
 
+Route::get('/orders', function () {
+    return view('orderdata.index');
+});
+
 Route::get('/api/customerlicense', function (Request $request) {
     $q = $request->query('q');
     $rows = CustomerLicense::query()
@@ -418,6 +422,101 @@ Route::put('/api/configapikey/{id}', function ($id, Request $request) {
 
 Route::delete('/api/configapikey/{id}', function ($id) {
     $aff = DB::table('ConfigApiKey')->where('ApiKeyId',$id)->delete();
+    if (!$aff) return response()->json(['message'=>'Not found'],404);
+    return response()->json(['ok'=>true]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::get('/api/orderdata', function (Request $request) {
+    $q = $request->query('q');
+    $rows = DB::table('OrderData')
+        ->when($q, function($qr) use ($q){
+            $like = '%'.$q.'%';
+            $qr->where(function($w) use ($like){
+                $w->where('OrderId','like',$like)
+                  ->orWhere('Email','like',$like)
+                  ->orWhere('Phone','like',$like)
+                  ->orWhere('Name','like',$like)
+                  ->orWhere('ProductName','like',$like);
+            });
+        })
+        ->orderByDesc('CreatedAt')
+        ->get();
+    $items = $rows->map(function($x){
+        $cr = $x->CreatedAt ? \Illuminate\Support\Carbon::parse($x->CreatedAt)->toISOString() : null;
+        $up = $x->UpdatedAt ? \Illuminate\Support\Carbon::parse($x->UpdatedAt)->toISOString() : null;
+        return [
+            'OrderId' => $x->OrderId,
+            'Email' => $x->Email,
+            'Phone' => $x->Phone,
+            'Name' => $x->Name,
+            'ProductName' => $x->ProductName,
+            'VariantPrice' => $x->VariantPrice,
+            'NetRevenue' => $x->NetRevenue,
+            'Status' => $x->Status,
+            'CreatedAt' => $cr,
+            'UpdatedAt' => $up,
+        ];
+    });
+    return response()->json($items);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::get('/api/orderdata/{id}', function ($id) {
+    $x = DB::table('OrderData')->where('OrderId',$id)->first();
+    if (!$x) return response()->json(['message'=>'Not found'],404);
+    $cr = $x->CreatedAt ? \Illuminate\Support\Carbon::parse($x->CreatedAt)->toISOString() : null;
+    $up = $x->UpdatedAt ? \Illuminate\Support\Carbon::parse($x->UpdatedAt)->toISOString() : null;
+    return response()->json([
+        'OrderId' => $x->OrderId,
+        'Email' => $x->Email,
+        'Phone' => $x->Phone,
+        'Name' => $x->Name,
+        'ProductName' => $x->ProductName,
+        'VariantPrice' => $x->VariantPrice,
+        'NetRevenue' => $x->NetRevenue,
+        'Status' => $x->Status,
+        'CreatedAt' => $cr,
+        'UpdatedAt' => $up,
+    ]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::post('/api/orderdata', function (Request $request) {
+    $data = $request->all();
+    $cr = null;
+    if (!empty($data['CreatedAtUtc'])) {
+        try { $cr = \Illuminate\Support\Carbon::parse($data['CreatedAtUtc'])->setTimezone('UTC')->format('Y-m-d H:i:s'); } catch (\Throwable $e) { $cr = null; }
+    }
+    DB::table('OrderData')->insert([
+        'OrderId' => $data['OrderId'] ?? ('ORD-'.strtoupper(bin2hex(random_bytes(5)))),
+        'Email' => $data['Email'] ?? null,
+        'Phone' => $data['Phone'] ?? null,
+        'Name' => $data['Name'] ?? null,
+        'ProductName' => $data['ProductName'] ?? null,
+        'VariantPrice' => $data['VariantPrice'] ?? null,
+        'NetRevenue' => $data['NetRevenue'] ?? null,
+        'Status' => $data['Status'] ?? 'Not Paid',
+        'CreatedAt' => $cr ?? now('UTC'),
+        'UpdatedAt' => now('UTC'),
+    ]);
+    return response()->json(['ok'=>true],201);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::put('/api/orderdata/{id}', function ($id, Request $request) {
+    $data = $request->all();
+    $upd = ['UpdatedAt' => now('UTC')];
+    foreach (['Email','Phone','Name','ProductName','VariantPrice','NetRevenue','Status'] as $f) {
+        if (array_key_exists($f,$data)) $upd[$f] = $data[$f];
+    }
+    if (array_key_exists('CreatedAtUtc',$data)) {
+        $cr = null; if ($data['CreatedAtUtc']) { try { $cr = \Illuminate\Support\Carbon::parse($data['CreatedAtUtc'])->setTimezone('UTC')->format('Y-m-d H:i:s'); } catch (\Throwable $e) { $cr = null; } }
+        $upd['CreatedAt'] = $cr ?? DB::raw('CreatedAt');
+    }
+    $aff = DB::table('OrderData')->where('OrderId',$id)->update($upd);
+    if (!$aff) return response()->json(['message'=>'Not found'],404);
+    return response()->json(['ok'=>true]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::delete('/api/orderdata/{id}', function ($id) {
+    $aff = DB::table('OrderData')->where('OrderId',$id)->delete();
     if (!$aff) return response()->json(['message'=>'Not found'],404);
     return response()->json(['ok'=>true]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);

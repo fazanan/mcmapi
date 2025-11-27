@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 
 class ScalevWebhookController extends Controller
 {
@@ -47,6 +49,35 @@ class ScalevWebhookController extends Controller
 
         if ($event === "order.created") {
             Log::info("ORDER CREATED RECEIVED", $json);
+            $data = $json['data'] ?? [];
+            $orderId = $data['order_id'] ?? null;
+            $email = $data['destination_address']['email'] ?? ($data['customer']['email'] ?? null);
+            $phone = $data['destination_address']['phone'] ?? ($data['customer']['phone'] ?? null);
+            $name = $data['destination_address']['name'] ?? ($data['customer']['name'] ?? null);
+            $productName = ($data['orderlines'][0]['product_name'] ?? null);
+            $variantPrice = isset($data['orderlines'][0]['variant_price']) ? (float)$data['orderlines'][0]['variant_price'] : null;
+            $netRevenue = isset($data['net_revenue']) ? (float)$data['net_revenue'] : null;
+            $createdAt = $data['created_at'] ?? null;
+            $createdDb = null;
+            if ($createdAt) {
+                try { $createdDb = Carbon::parse($createdAt)->setTimezone('UTC')->format('Y-m-d H:i:s'); } catch (\Throwable $e) { $createdDb = null; }
+            }
+            if ($orderId) {
+                DB::table('OrderData')->updateOrInsert(
+                    ['OrderId' => $orderId],
+                    [
+                        'Email' => $email,
+                        'Phone' => $phone,
+                        'Name' => $name,
+                        'ProductName' => $productName,
+                        'VariantPrice' => $variantPrice,
+                        'NetRevenue' => $netRevenue,
+                        'Status' => 'Not Paid',
+                        'CreatedAt' => $createdDb ?? now('UTC'),
+                        'UpdatedAt' => now('UTC'),
+                    ]
+                );
+            }
         }
 
         return response()->json(['message' => 'OK']);
