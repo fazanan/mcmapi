@@ -369,29 +369,49 @@ Route::get('/api/configapikey/{id}', function ($id) {
 Route::post('/api/configapikey', function (Request $request) {
     $data = $request->all();
     $now = now('UTC');
+    $nextId = ((int) (DB::table('ConfigApiKey')->max('ApiKeyId') ?? 0)) + 1;
+    $coolDb = null;
+    if (isset($data['CooldownUntilPT']) && $data['CooldownUntilPT']) {
+        try {
+            $coolDb = \Illuminate\Support\Carbon::parse($data['CooldownUntilPT'])->setTimezone('UTC')->format('Y-m-d H:i:s');
+        } catch (\Throwable $e) {
+            $coolDb = null;
+        }
+    }
     DB::table('ConfigApiKey')->insert([
+        'ApiKeyId' => $nextId,
         'JenisApiKey' => $data['JenisApiKey'] ?? null,
         'ApiKey' => $data['ApiKey'] ?? null,
         'Model' => $data['Model'] ?? null,
         'DefaultVoiceId' => $data['DefaultVoiceId'] ?? null,
         'Status' => $data['Status'] ?? 'AVAILABLE',
+        'CooldownUntilPT' => $coolDb,
         'UpdatedAt' => $now,
+        'CreatedAt' => $now,
     ]);
-    return response()->json(['ok'=>true],201);
+    return response()->json(['ok'=>true,'ApiKeyId'=>$nextId],201);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::put('/api/configapikey/{id}', function ($id, Request $request) {
     $data = $request->all();
     $now = now('UTC');
-    $aff = DB::table('ConfigApiKey')->where('ApiKeyId',$id)->update([
-        'JenisApiKey' => $data['JenisApiKey'] ?? DB::raw('JenisApiKey'),
-        'ApiKey' => $data['ApiKey'] ?? DB::raw('ApiKey'),
-        'Model' => $data['Model'] ?? DB::raw('Model'),
-        'DefaultVoiceId' => $data['DefaultVoiceId'] ?? DB::raw('DefaultVoiceId'),
-        'Status' => $data['Status'] ?? DB::raw('Status'),
-        'CooldownUntilPT' => $data['CooldownUntilPT'] ?? DB::raw('CooldownUntilPT'),
+    $update = [
         'UpdatedAt' => $now,
-    ]);
+    ];
+    if (array_key_exists('JenisApiKey',$data)) $update['JenisApiKey'] = $data['JenisApiKey'];
+    if (array_key_exists('ApiKey',$data)) $update['ApiKey'] = $data['ApiKey'];
+    if (array_key_exists('Model',$data)) $update['Model'] = $data['Model'];
+    if (array_key_exists('DefaultVoiceId',$data)) $update['DefaultVoiceId'] = $data['DefaultVoiceId'];
+    if (array_key_exists('Status',$data)) $update['Status'] = $data['Status'];
+    if (array_key_exists('CooldownUntilPT',$data)) {
+        $coolDb = null;
+        if ($data['CooldownUntilPT']) {
+            try { $coolDb = \Illuminate\Support\Carbon::parse($data['CooldownUntilPT'])->setTimezone('UTC')->format('Y-m-d H:i:s'); }
+            catch (\Throwable $e) { $coolDb = null; }
+        }
+        $update['CooldownUntilPT'] = $coolDb; // boleh null untuk clear cooldown
+    }
+    $aff = DB::table('ConfigApiKey')->where('ApiKeyId',$id)->update($update);
     if (!$aff) return response()->json(['message'=>'Not found'],404);
     return response()->json(['ok'=>true]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
