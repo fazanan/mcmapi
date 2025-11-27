@@ -10,6 +10,15 @@
   
 </head>
 <body>
+  <nav class="navbar navbar-expand-lg navbar-light bg-light mb-3">
+    <a class="navbar-brand" href="/">Admin</a>
+    <div class="collapse navbar-collapse">
+      <ul class="navbar-nav mr-auto">
+        <li class="nav-item"><a class="nav-link" href="/licenses">Licenses</a></li>
+        <li class="nav-item"><a class="nav-link" href="/config-keys">ConfigApiKey</a></li>
+      </ul>
+    </div>
+  </nav>
   <div class="container-fluid py-3">
     @yield('content')
   </div>
@@ -17,6 +26,6 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
   <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
-  <script src="/js/licenses.js"></script>
+  @stack('scripts')
 </body>
 </html>

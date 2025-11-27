@@ -16,6 +16,10 @@ Route::get('/licenses', function () {
     return view('licenses.index');
 });
 
+Route::get('/config-keys', function () {
+    return view('configapikey.index');
+});
+
 Route::get('/api/customerlicense', function (Request $request) {
     $q = $request->query('q');
     $rows = CustomerLicense::query()
@@ -312,6 +316,86 @@ Route::match(['GET','POST'],'/api/license/reset', function (Request $request) {
             'ExpiresAt' => optional($lic->expires_at_utc)->toISOString(),
         ],
     ],200);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::get('/api/configapikey', function (Request $request) {
+    $q = $request->query('q');
+    $rows = DB::table('ConfigApiKey')
+        ->when($q, function($qr) use ($q){
+            $like = '%'.$q.'%';
+            $qr->where(function($w) use ($like){
+                $w->where('JenisApiKey','like',$like)
+                  ->orWhere('ApiKey','like',$like)
+                  ->orWhere('Model','like',$like)
+                  ->orWhere('Status','like',$like);
+            });
+        })
+        ->orderByDesc('UpdatedAt')
+        ->get();
+    $items = $rows->map(function($x){
+        return [
+            'ApiKeyId' => $x->ApiKeyId ?? null,
+            'JenisApiKey' => $x->JenisApiKey ?? null,
+            'ApiKey' => $x->ApiKey ?? null,
+            'Model' => $x->Model ?? null,
+            'DefaultVoiceId' => $x->DefaultVoiceId ?? null,
+            'Status' => $x->Status ?? null,
+            'CooldownUntilPT' => optional($x->CooldownUntilPT)->toISOString(),
+            'UpdatedAt' => optional($x->UpdatedAt)->toISOString(),
+        ];
+    });
+    return response()->json($items);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::get('/api/configapikey/{id}', function ($id) {
+    $x = DB::table('ConfigApiKey')->where('ApiKeyId',$id)->first();
+    if (!$x) return response()->json(['message'=>'Not found'],404);
+    return response()->json([
+        'ApiKeyId' => $x->ApiKeyId ?? null,
+        'JenisApiKey' => $x->JenisApiKey ?? null,
+        'ApiKey' => $x->ApiKey ?? null,
+        'Model' => $x->Model ?? null,
+        'DefaultVoiceId' => $x->DefaultVoiceId ?? null,
+        'Status' => $x->Status ?? null,
+        'CooldownUntilPT' => optional($x->CooldownUntilPT)->toISOString(),
+        'UpdatedAt' => optional($x->UpdatedAt)->toISOString(),
+    ]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::post('/api/configapikey', function (Request $request) {
+    $data = $request->all();
+    $now = now('UTC');
+    DB::table('ConfigApiKey')->insert([
+        'JenisApiKey' => $data['JenisApiKey'] ?? null,
+        'ApiKey' => $data['ApiKey'] ?? null,
+        'Model' => $data['Model'] ?? null,
+        'DefaultVoiceId' => $data['DefaultVoiceId'] ?? null,
+        'Status' => $data['Status'] ?? 'AVAILABLE',
+        'UpdatedAt' => $now,
+    ]);
+    return response()->json(['ok'=>true],201);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::put('/api/configapikey/{id}', function ($id, Request $request) {
+    $data = $request->all();
+    $now = now('UTC');
+    $aff = DB::table('ConfigApiKey')->where('ApiKeyId',$id)->update([
+        'JenisApiKey' => $data['JenisApiKey'] ?? DB::raw('JenisApiKey'),
+        'ApiKey' => $data['ApiKey'] ?? DB::raw('ApiKey'),
+        'Model' => $data['Model'] ?? DB::raw('Model'),
+        'DefaultVoiceId' => $data['DefaultVoiceId'] ?? DB::raw('DefaultVoiceId'),
+        'Status' => $data['Status'] ?? DB::raw('Status'),
+        'CooldownUntilPT' => $data['CooldownUntilPT'] ?? DB::raw('CooldownUntilPT'),
+        'UpdatedAt' => $now,
+    ]);
+    if (!$aff) return response()->json(['message'=>'Not found'],404);
+    return response()->json(['ok'=>true]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::delete('/api/configapikey/{id}', function ($id) {
+    $aff = DB::table('ConfigApiKey')->where('ApiKeyId',$id)->delete();
+    if (!$aff) return response()->json(['message'=>'Not found'],404);
+    return response()->json(['ok'=>true]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::post('/api/customerlicense/{id}/reset', function ($id, Request $request) {

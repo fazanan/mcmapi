@@ -86,6 +86,9 @@
     </form>
   </div>
 </div>
+@push('scripts')
+<script src="/js/licenses.js"></script>
+@endpush
 
 <div class="modal fade" id="createModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog modal-lg" role="document">
