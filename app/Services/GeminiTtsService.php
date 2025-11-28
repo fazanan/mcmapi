@@ -55,7 +55,8 @@ class GeminiTtsService
             ];
         }
 
-        $data = data_get($resp->json(), 'candidates.0.content.parts.0.inline_data.data');
+        // FIX inlineData
+        $data = data_get($resp->json(), 'candidates.0.content.parts.0.inlineData.data');
 
         if ($data) return base64_decode($data);
 
