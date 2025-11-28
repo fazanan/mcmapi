@@ -8,55 +8,67 @@ class GeminiTtsService
 {
     public function synthesize(string $text, ?string $voice, ?float $speed, $keyRow)
     {
-        $model = $keyRow->Model ?? 'gemini-2.5-pro-preview-tts';
+        // Model dari database
+        $model = $keyRow->Model ?? 'gemini-2.5-flash-preview-tts';
 
+        // Voice fallback
         $voiceName = $voice ?: ($keyRow->DefaultVoiceId ?? 'Verse');
 
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/'
-            . urlencode($model)
-            . ':generateSpeech?key='
-            . $keyRow->ApiKey;
+        // Endpoint TTS yang benar (SAMA seperti client)
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/"
+             . urlencode($model)
+             . ":generateContent?key={$keyRow->ApiKey}";
 
+        // Payload IDENTIK client
         $payload = [
-            'contents' => [
+            "contents" => [
                 [
-                    'role' => 'user',
-                    'parts' => [
-                        ['text' => $text]
+                    "role" => "user",
+                    "parts" => [
+                        [ "text" => $text ]
                     ]
                 ]
             ],
-            'audioConfig' => [
-                'voiceName' => $voiceName,
-                'audioEncoding' => 'MP3',
-                'speakingRate' => $speed ?? 1.0
+            "generationConfig" => [
+                "responseMimeType" => "audio/mp3",
+                "voiceConfig" => [
+                    "voiceName" => $voiceName
+                ],
+                "audioConfig" => [
+                    "speakingRate" => $speed ?? 1.0
+                ]
             ]
         ];
 
-        try {
-            $resp = Http::timeout(25)->post($url, $payload);
+        // Kirim request
+        $resp = Http::timeout(30)->post($url, $payload);
 
-            // Jika berhasil → audioBase64 ada di sini
-            if ($resp->successful()) {
-                $json = $resp->json();
-                $base64 = data_get($json, 'audioContent');
-
-                if ($base64) {
-                    return base64_decode($base64);
-                }
-            }
-
-            // Jika gagal → kembalikan error detailnya untuk debugging
+        // Jika rate limit
+        if ($resp->status() === 429) {
             return [
-                'status' => $resp->status(),
-                'body' => $resp->json(),
-            ];
-
-        } catch (\Throwable $e) {
-            return [
-                'status' => 'exception',
-                'error' => $e->getMessage()
+                'error' => 429,
+                'status' => 429,
+                'body' => $resp->json()
             ];
         }
+
+        // Jika tidak 200
+        if ($resp->status() !== 200) {
+            return [
+                'error' => $resp->status(),
+                'status' => $resp->status(),
+                'body' => $resp->json()
+            ];
+        }
+
+        // Ambil inline_data
+        $data = data_get($resp->json(), 'candidates.0.content.parts.0.inline_data.data');
+
+        if ($data) {
+            return base64_decode($data);
+        }
+
+        // Jika audio tidak ditemukan
+        return null;
     }
 }
