@@ -86,6 +86,43 @@ class ScalevWebhookController extends Controller
                 } catch (\Throwable $e) {
                     Log::error('OrderData upsert failed: '.$e->getMessage());
                 }
+
+                try {
+                    $cfg = DB::table('WhatsAppConfig')->orderByDesc('UpdatedAt')->first();
+                    if ($cfg && $phone) {
+                        $recipientRaw = preg_replace('/[^0-9+]/','', (string)$phone);
+                        $recipient = ltrim($recipientRaw, '+');
+                        if (strlen($recipient) > 0 && $recipient[0] === '0') { $recipient = '62'.substr($recipient,1); }
+                        if (strlen($recipient) > 0 && $recipient[0] === '8') { $recipient = '62'.$recipient; }
+                        $pn = $productName ?: 'produk Anda';
+                        $msg = "Hai kak 👋 Pesanan ".$pn." (ID: ".$orderId.") sudah berhasil kami terima.\n\n".
+                               "Supaya kakak bisa langsung pakai aplikasinya,\n".
+                               "silakan selesaikan pembayarannya ya.💚\n\n".
+                               "Begitu pembayaran sukses, license & bonus otomatis kami kirim.\n".
+                               "Butuh bantuan? Balas chat ini ya, kami siap bantu 😊";
+                        $resp = Http::withOptions(['multipart' => [
+                            ['name'=>'secret','contents'=>$cfg->ApiSecret],
+                            ['name'=>'account','contents'=>$cfg->AccountUniqueId],
+                            ['name'=>'recipient','contents'=>$recipient],
+                            ['name'=>'type','contents'=>'text'],
+                            ['name'=>'message','contents'=>$msg],
+                        ]])->post('https://whapify.id/api/send/whatsapp');
+                        $code = (int) $resp->status();
+                        $j = null; try { $j = $resp->json(); } catch (\Throwable $__) { $j = null; }
+                        $ok = $code >= 200 && $code < 300 && ((int)($j['status'] ?? $code) === 200);
+                        if (!$ok) {
+                            Http::asForm()->post('https://whapify.id/api/send/whatsapp', [
+                                'secret' => $cfg->ApiSecret,
+                                'account' => $cfg->AccountUniqueId,
+                                'recipient' => $recipient,
+                                'type' => 'text',
+                                'message' => $msg,
+                            ]);
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    Log::error('Send WhatsApp on order.created failed: '.$e->getMessage());
+                }
             }
         }
 
