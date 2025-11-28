@@ -6,6 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
+use App\Models\CustomerLicense;
+use App\Models\VoiceOverTransaction;
+use Illuminate\Support\Str;
 
 class ScalevWebhookController extends Controller
 {
@@ -80,6 +83,94 @@ class ScalevWebhookController extends Controller
                     );
                 } catch (\Throwable $e) {
                     Log::error('OrderData upsert failed: '.$e->getMessage());
+                }
+            }
+        }
+
+        if ($event === "order.payment_status_changed") {
+            $data = $json['data'] ?? [];
+            $orderId = $data['order_id'] ?? null;
+            $paymentStatus = strtolower((string)($data['payment_status'] ?? ''));
+            if ($orderId) {
+                try {
+                    if (in_array($paymentStatus, ['paid','settled'])) {
+                        DB::table('OrderData')->updateOrInsert(
+                            ['OrderId'=>$orderId],
+                            [
+                                'Status' => 'Paid',
+                                'UpdatedAt' => now('UTC'),
+                            ]
+                        );
+
+                        $email = $data['customer']['email'] ?? null;
+                        $phone = $data['customer']['phone'] ?? null;
+                        $name = $data['customer']['name'] ?? null;
+                        $productName = null;
+                        if (!empty($data['pg_payment_info']['description'])) {
+                            $productName = (string)$data['pg_payment_info']['description'];
+                        }
+                        $lic = CustomerLicense::query()->where('order_id',$orderId)->first();
+                        if (!$lic) {
+                            $licenseKey = 'LIC-'.strtoupper(bin2hex(random_bytes(4)));
+                            $lic = CustomerLicense::create([
+                                'order_id' => $orderId,
+                                'license_key' => $licenseKey,
+                                'owner' => $name,
+                                'email' => $email,
+                                'phone' => $phone,
+                                'edition' => null,
+                                'payment_status' => 'paid',
+                                'product_name' => $productName,
+                                'tenor_days' => null,
+                                'is_activated' => false,
+                                'activation_date_utc' => null,
+                                'expires_at_utc' => null,
+                                'machine_id' => null,
+                                'max_seats' => null,
+                                'max_video' => null,
+                                'features' => null,
+                                'vo_seconds_remaining' => 0,
+                                'status' => 'InActive',
+                            ]);
+                        } else {
+                            $lic->fill([
+                                'owner' => $name ?? $lic->owner,
+                                'email' => $email ?? $lic->email,
+                                'phone' => $phone ?? $lic->phone,
+                                'payment_status' => 'paid',
+                                'product_name' => $productName ?? $lic->product_name,
+                                'status' => $lic->status ?: 'InActive',
+                            ]);
+                            $lic->save();
+                        }
+
+                        $topup = 100000; // seconds
+                        $lic->vo_seconds_remaining = (int)($lic->vo_seconds_remaining ?? 0) + (int)$topup;
+                        $lic->save();
+                        VoiceOverTransaction::create(['license_id'=>$lic->id,'type'=>'topup','seconds'=>$topup]);
+                    }
+                } catch (\Throwable $e) {
+                    Log::error('Payment status handler failed: '.$e->getMessage());
+                }
+            }
+        }
+
+        if ($event === "order.payment_status_changed") {
+            $data = $json['data'] ?? [];
+            $orderId = $data['order_id'] ?? null;
+            $ps = strtolower((string)($data['payment_status'] ?? ''));
+            $newStatus = ($ps === 'paid' || $ps === 'settled') ? 'Paid' : (($ps === 'unpaid') ? 'Not Paid' : ucfirst($ps));
+            if ($orderId) {
+                try {
+                    DB::table('OrderData')->updateOrInsert(
+                        ['OrderId' => $orderId],
+                        [
+                            'Status' => $newStatus,
+                            'UpdatedAt' => now('UTC'),
+                        ]
+                    );
+                } catch (\Throwable $e) {
+                    Log::error('OrderData payment update failed: '.$e->getMessage());
                 }
             }
         }
