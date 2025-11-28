@@ -1,0 +1,18 @@
+function fmtIso(dt){return dt?new Date(dt).toLocaleString():''}
+async function api(url,method,body){const res=await fetch(url,{method:method||'GET',headers:{'Content-Type':'application/json','Accept':'application/json','X-Requested-With':'XMLHttpRequest'},body:body?JSON.stringify(body):undefined});const txt=await res.text();try{return{ok:res.ok,code:res.status,json:JSON.parse(txt)}}catch(e){return{ok:res.ok,code:res.status,text:txt}}}
+function msg(t,ok){const el=document.getElementById('msg');el.className=ok?'text-success':'text-danger';el.textContent=t}
+let dt=null;let rows=[]
+async function reload(){const q=document.getElementById('txtSearch').value;const r=await api('/api/whatsappconfig'+(q?('?q='+encodeURIComponent(q)):''));if(!r.ok){return msg('Gagal load: '+(r.text||r.code),false)}rows=r.json||[];dt.clear().draw();rows.forEach(x=>{dt.row.add([
+  '<button class="btn btn-sm btn-primary" data-act="edit" data-id="'+x.Id+'">Edit</button> <button class="btn btn-sm btn-danger" data-act="del" data-id="'+x.Id+'">Delete</button>',
+  x.Id,
+  x.ApiSecret,
+  x.AccountUniqueId,
+  fmtIso(x.UpdatedAt)
+]).draw(false)})}
+function bindActions(){document.getElementById('btnAdd').addEventListener('click',function(){document.getElementById('C_ApiSecret').value='';document.getElementById('C_AccountUniqueId').value='';$('#createModal').modal('show')});
+document.getElementById('btnReload').addEventListener('click',reload);document.getElementById('btnSearch').addEventListener('click',reload);
+document.getElementById('frmCreate').addEventListener('submit',async function(e){e.preventDefault();const payload={ApiSecret:document.getElementById('C_ApiSecret').value||null,AccountUniqueId:document.getElementById('C_AccountUniqueId').value||null};const r=await api('/api/whatsappconfig','POST',payload);if(!r.ok){return alert('Gagal create: '+(r.text||r.code))}$('#createModal').modal('hide');await reload()});
+document.getElementById('frmEdit').addEventListener('submit',async function(e){e.preventDefault();const id=document.getElementById('E_Id').value;const payload={ApiSecret:document.getElementById('E_ApiSecret').value||null,AccountUniqueId:document.getElementById('E_AccountUniqueId').value||null};const r=await api('/api/whatsappconfig/'+encodeURIComponent(id),'PUT',payload);if(!r.ok){return alert('Gagal save: '+(r.text||r.code))}$('#editModal').modal('hide');await reload()});
+document.getElementById('btnLatest').addEventListener('click',function(){if(rows.length<1)return;rows.sort((a,b)=>new Date(b.UpdatedAt||0)-new Date(a.UpdatedAt||0));const x=rows[0];document.getElementById('E_Id').value=x.Id;document.getElementById('E_ApiSecret').value=x.ApiSecret||'';document.getElementById('E_AccountUniqueId').value=x.AccountUniqueId||'';$('#editModal').modal('show')});
+$('#tblWA').on('click','button',async function(){const act=this.getAttribute('data-act');const id=this.getAttribute('data-id');if(act==='edit'){const r=await api('/api/whatsappconfig/'+encodeURIComponent(id));if(!r.ok){return alert('Tidak ditemukan')}const x=r.json;document.getElementById('E_Id').value=x.Id;document.getElementById('E_ApiSecret').value=x.ApiSecret||'';document.getElementById('E_AccountUniqueId').value=x.AccountUniqueId||'';$('#editModal').modal('show')}else if(act==='del'){if(!confirm('Delete config '+id+'?'))return;const r=await api('/api/whatsappconfig/'+encodeURIComponent(id),'DELETE');if(!r.ok){return alert('Gagal delete: '+(r.text||r.code))}await reload()}})}
+$(document).ready(function(){dt=$('#tblWA').DataTable({responsive:true});bindActions();reload()})

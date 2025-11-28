@@ -24,6 +24,10 @@ Route::get('/orders', function () {
     return view('orderdata.index');
 });
 
+Route::get('/whatsapp-config', function () {
+    return view('whatsappconfig.index');
+});
+
 Route::get('/api/customerlicense', function (Request $request) {
     $q = $request->query('q');
     $rows = CustomerLicense::query()
@@ -662,6 +666,83 @@ Route::get('/api/voice/{license}/voice-config', function ($license) {
 
 Route::post('/api/webhooks/scalev', [ScalevWebhookController::class,'handle'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::get('/api/whatsappconfig', function (Request $request) {
+    $q = $request->query('q');
+    $rows = DB::table('WhatsAppConfig')
+        ->when($q, function($qr) use ($q){
+            $like = '%'.$q.'%';
+            $qr->where(function($w) use ($like){
+                $w->where('ApiSecret','like',$like)
+                  ->orWhere('AccountUniqueId','like',$like);
+            });
+        })
+        ->orderByDesc('UpdatedAt')
+        ->get();
+    $items = $rows->map(function($x){
+        $cr = $x->CreatedAt ? \Illuminate\Support\Carbon::parse($x->CreatedAt)->toISOString() : null;
+        $up = $x->UpdatedAt ? \Illuminate\Support\Carbon::parse($x->UpdatedAt)->toISOString() : null;
+        return [
+            'Id' => $x->Id,
+            'ApiSecret' => $x->ApiSecret,
+            'AccountUniqueId' => $x->AccountUniqueId,
+            'CreatedAt' => $cr,
+            'UpdatedAt' => $up,
+        ];
+    });
+    return response()->json($items);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::get('/api/whatsappconfig/{id}', function ($id) {
+    $x = DB::table('WhatsAppConfig')->where('Id',$id)->first();
+    if (!$x) return response()->json(['message'=>'Not found'],404);
+    $cr = $x->CreatedAt ? \Illuminate\Support\Carbon::parse($x->CreatedAt)->toISOString() : null;
+    $up = $x->UpdatedAt ? \Illuminate\Support\Carbon::parse($x->UpdatedAt)->toISOString() : null;
+    return response()->json([
+        'Id' => $x->Id,
+        'ApiSecret' => $x->ApiSecret,
+        'AccountUniqueId' => $x->AccountUniqueId,
+        'CreatedAt' => $cr,
+        'UpdatedAt' => $up,
+    ]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::post('/api/whatsappconfig', function (Request $request) {
+    $data = $request->all();
+    $now = now('UTC');
+    $maxId = (int) (DB::table('WhatsAppConfig')->max('Id') ?? 0);
+    $idVal = (int) ($data['Id'] ?? 0);
+    if ($idVal <= 0) { $idVal = $maxId + 1; }
+    try {
+        DB::table('WhatsAppConfig')->insert([
+            'Id' => $idVal,
+            'ApiSecret' => $data['ApiSecret'] ?? null,
+            'AccountUniqueId' => $data['AccountUniqueId'] ?? null,
+            'UpdatedAt' => $now,
+            'CreatedAt' => $now,
+        ]);
+        return response()->json(['ok'=>true,'Id'=>$idVal],201);
+    } catch (\Throwable $e) {
+        return response()->json(['ok'=>false,'message'=>$e->getMessage()],500);
+    }
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::put('/api/whatsappconfig/{id}', function ($id, Request $request) {
+    $data = $request->all();
+    $upd = ['UpdatedAt' => now('UTC')];
+    foreach (['ApiSecret','AccountUniqueId'] as $f) {
+        if (array_key_exists($f,$data)) $upd[$f] = $data[$f];
+    }
+    $aff = DB::table('WhatsAppConfig')->where('Id',$id)->update($upd);
+    if (!$aff) return response()->json(['message'=>'Not found'],404);
+    return response()->json(['ok'=>true]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::delete('/api/whatsappconfig/{id}', function ($id) {
+    $aff = DB::table('WhatsAppConfig')->where('Id',$id)->delete();
+    if (!$aff) return response()->json(['message'=>'Not found'],404);
+    return response()->json(['ok'=>true]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::get('/api/voice/{license}/vo/status', function ($license) {
     $lic = CustomerLicense::query()->where('license_key',$license)->first();

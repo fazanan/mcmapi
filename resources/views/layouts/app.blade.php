@@ -17,6 +17,7 @@
         <li class="nav-item"><a class="nav-link" href="/licenses">Licenses</a></li>
         <li class="nav-item"><a class="nav-link" href="/config-keys">ConfigApiKey</a></li>
         <li class="nav-item"><a class="nav-link" href="/orders">Orders</a></li>
+        <li class="nav-item"><a class="nav-link" href="/whatsapp-config">WhatsAppApiConfig</a></li>
       </ul>
     </div>
   </nav>
