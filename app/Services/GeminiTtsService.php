@@ -6,12 +6,12 @@ use Illuminate\Support\Facades\Http;
 
 class GeminiTtsService
 {
-    public function synthesize(string $text, string $voice, $keyRow)
+    public function synthesize(string $text, $keyRow)
     {
-        // MODEL YANG VALID UNTUK REST
-        $model = 'gemini-2.5-flash-tts';
+        // model TTS yang memang ada di API key kamu
+        $model = "models/gemini-2.5-pro-preview-tts";
 
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:streamGenerateContent?key={$keyRow->ApiKey}";
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$keyRow->ApiKey}";
 
         $payload = [
             "contents" => [
@@ -22,52 +22,25 @@ class GeminiTtsService
                     ]
                 ]
             ],
-
             "generationConfig" => [
                 "responseModalities" => ["audio"],
-                "temperature" => 1,
-                "speech_config" => [
-                    "voice_config" => [
-                        "prebuilt_voice_config" => [
-                            "voice_name" => $voice
-                        ]
-                    ]
-                ]
+                "temperature" => 1
             ]
         ];
 
-        try {
-            $resp = Http::withOptions(['stream' => true])
-                ->timeout(60)
-                ->post($url, $payload);
+        $resp = Http::timeout(30)->post($url, $payload);
 
-            if ($resp->status() === 429) {
-                return ['error' => 429, 'body' => null];
-            }
-
-            if ($resp->status() !== 200) {
-                return [
-                    'error' => $resp->status(),
-                    'body' => $resp->json()
-                ];
-            }
-
-            // STREAM PARSING
-            $audioData = '';
-            foreach ($resp->toPsrResponse()->getBody() as $chunk) {
-                $j = json_decode($chunk, true);
-                $b64 = data_get($j, 'candidates.0.content.parts.0.inlineData.data');
-
-                if ($b64) {
-                    $audioData .= base64_decode($b64);
-                }
-            }
-
-            return $audioData ?: ['error' => 'no_audio_stream'];
+        if ($resp->status() !== 200) {
+            return [
+                "error"  => $resp->status(),
+                "body"   => $resp->json(),
+            ];
         }
 
-        catch (\Throwable $e) {
-            return ['error' => 'exception', 'message' => $e->getMessage()];
-        }
+        $b64 = data_get($resp->json(), 'candidates.0.content.parts.0.inline_data.data');
+
+        if (!$b64) return ["error" => "NO_AUDIO"];
+
+        return base64_decode($b64);
     }
 }
