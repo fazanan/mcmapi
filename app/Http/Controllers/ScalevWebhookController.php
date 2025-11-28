@@ -106,8 +106,30 @@ class ScalevWebhookController extends Controller
                         $phone = $data['customer']['phone'] ?? null;
                         $name = $data['customer']['name'] ?? null;
                         $productName = null;
-                        if (!empty($data['pg_payment_info']['description'])) {
+                        $od = DB::table('OrderData')->where('OrderId',$orderId)->first();
+                        if ($od && !empty($od->ProductName)) {
+                            $productName = (string)$od->ProductName;
+                        } else if (!empty($data['orderlines'][0]['product_name'])) {
+                            $productName = (string)$data['orderlines'][0]['product_name'];
+                        } else if (!empty($data['pg_payment_info']['description'])) {
                             $productName = (string)$data['pg_payment_info']['description'];
+                        }
+                        $edition = null;
+                        $tenorDays = null;
+                        if ($productName) {
+                            $parts = explode('-', $productName);
+                            if (count($parts) >= 3) {
+                                $edition = trim($parts[1]);
+                                $m = [];
+                                if (preg_match('/Akses\s+(\d+)\s+bulan/i', $productName, $m)) {
+                                    $tenorDays = ((int)$m[1]) * 30;
+                                }
+                            } else {
+                                $m = [];
+                                if (preg_match('/Akses\s+(\d+)\s+bulan/i', $productName, $m)) {
+                                    $tenorDays = ((int)$m[1]) * 30;
+                                }
+                            }
                         }
                         $lic = CustomerLicense::query()->where('order_id',$orderId)->first();
                         if (!$lic) {
@@ -118,16 +140,16 @@ class ScalevWebhookController extends Controller
                                 'owner' => $name,
                                 'email' => $email,
                                 'phone' => $phone,
-                                'edition' => null,
+                                'edition' => $edition,
                                 'payment_status' => 'paid',
                                 'product_name' => $productName,
-                                'tenor_days' => null,
+                                'tenor_days' => $tenorDays,
                                 'is_activated' => false,
                                 'activation_date_utc' => null,
                                 'expires_at_utc' => null,
                                 'machine_id' => null,
-                                'max_seats' => null,
-                                'max_video' => null,
+                                'max_seats' => 1,
+                                'max_video' => 232331,
                                 'features' => null,
                                 'vo_seconds_remaining' => 0,
                                 'status' => 'InActive',
@@ -139,6 +161,10 @@ class ScalevWebhookController extends Controller
                                 'phone' => $phone ?? $lic->phone,
                                 'payment_status' => 'paid',
                                 'product_name' => $productName ?? $lic->product_name,
+                                'edition' => $edition ?? $lic->edition,
+                                'tenor_days' => $tenorDays ?? $lic->tenor_days,
+                                'max_seats' => 1,
+                                'max_video' => 232331,
                                 'status' => $lic->status ?: 'InActive',
                             ]);
                             $lic->save();
