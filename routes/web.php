@@ -413,7 +413,12 @@ Route::put('/api/configapikey/{id}', function ($id, Request $request) {
     ];
     if (array_key_exists('JenisApiKey',$data)) $update['JenisApiKey'] = $data['JenisApiKey'];
     if (array_key_exists('ApiKey',$data)) $update['ApiKey'] = $data['ApiKey'];
-    if (array_key_exists('Model',$data)) $update['Model'] = $data['Model'];
+   if (array_key_exists('Model',$data)) {
+        if (!empty($data['Model'])) {
+            $update['Model'] = $data['Model'];
+        }
+    }
+
     if (array_key_exists('DefaultVoiceId',$data)) $update['DefaultVoiceId'] = $data['DefaultVoiceId'];
     if (array_key_exists('Status',$data)) $update['Status'] = $data['Status'];
     if (array_key_exists('CooldownUntilPT',$data)) {
