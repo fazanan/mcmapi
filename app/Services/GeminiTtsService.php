@@ -8,7 +8,7 @@ class GeminiTtsService
 {
     public function synthesize(string $text, string $voice, $keyRow)
     {
-        $model = $keyRow->Model ?? "gemini-2.5-pro-preview-tts";
+        $model = $keyRow->Model ?? "gemini-2.0-flash-tts";
 
         $url = "https://generativelanguage.googleapis.com/v1beta/models/"
              . urlencode($model)
