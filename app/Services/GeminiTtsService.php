@@ -29,16 +29,14 @@ class GeminiTtsService
             ]
         ];
 
-        $resp = Http::timeout(20)->post($url, $payload);
+       $resp = Http::timeout(20)->post($url, $payload);
 
-        if ($resp->status() === 200) {
-            $content = $resp->json('audioContent');
-            return $content ? base64_decode($content) : null;
-        }
+        // DEBUG: return seluruh response mentah
+        return [
+            'status' => $resp->status(),
+            'body'   => $resp->json(),
+        ];
 
-        if ($resp->status() === 429) {
-            return ['error' => 429];
-        }
 
         return null;
     }
