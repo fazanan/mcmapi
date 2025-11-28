@@ -8,48 +8,36 @@ class GeminiTtsService
 {
     public function synthesize(string $text, ?string $voice, ?float $speed, $keyRow)
     {
-        $model = $keyRow->Model ?? 'gemini-2.5-flash-preview-tts';
+        $model = $keyRow->Model ?? 'gemini-2.5-pro-preview-tts';
 
-        // Endpoint resmi Gemini TTS
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/"
-             . urlencode($model)
-             . ":generateSpeech?key=" . $keyRow->ApiKey;
+        // Voice fallback aman
+        $voiceName = $voice ?: ($keyRow->DefaultVoiceId ?: 'Verse');
 
-        // Payload sesuai AI Studio
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/' 
+            . urlencode($model) 
+            . ':generateSpeech?key=' 
+            . $keyRow->ApiKey;
+
         $payload = [
-            "text" => $text,
-            "voice" => [
-                "voiceName" => $voice ?: ($keyRow->DefaultVoiceId ?? "Puck"),
-                "speakingRate" => $speed ?? 1.0
+            'text' => $text,
+            'voiceConfig' => [
+                'voiceName' => $voiceName
             ],
-            "audioConfig" => [
-                "audioEncoding" => "MP3"
+            'audioConfig' => [
+                'audioEncoding' => 'MP3',
+                'speakingRate' => $speed ?? 1.0
             ]
         ];
 
-        try {
-            $resp = Http::timeout(30)
-                ->acceptJson()
-                ->asJson()
-                ->post($url, $payload);
+        $resp = Http::timeout(20)->post($url, $payload);
 
-            // Success
-            if ($resp->status() === 200) {
-                $data = $resp->json();
-                $audio = data_get($data, 'audio.data');
-                if ($audio) {
-                    return base64_decode($audio);
-                }
-                return null;
-            }
+        if ($resp->status() === 200) {
+            $content = $resp->json('audioContent');
+            return $content ? base64_decode($content) : null;
+        }
 
-            // Rate limit
-            if ($resp->status() === 429) {
-                return ['error' => 429];
-            }
-
-        } catch (\Throwable $e) {
-            // Log error jika perlu
+        if ($resp->status() === 429) {
+            return ['error' => 429];
         }
 
         return null;
