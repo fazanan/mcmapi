@@ -6,15 +6,12 @@ use Illuminate\Support\Facades\Http;
 
 class GeminiTtsService
 {
-    public function synthesize(string $text, string $voice, $keyRow)
+    public function testTts(string $text, $keyRow)
     {
-        $model = $keyRow->Model ?? "gemini-2.0-flash-tts";
+        $model = 'gemini-2.0-tts';
 
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/"
-             . urlencode($model)
-             . ":streamGenerateContent?key={$keyRow->ApiKey}";
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$keyRow->ApiKey}";
 
-        // === INI 100% CONTEKAN RESMI REST GOOGLE ===
         $payload = [
             "contents" => [
                 [
@@ -25,40 +22,36 @@ class GeminiTtsService
                 ]
             ],
             "generationConfig" => [
-                "responseModalities" => ["audio"],
-                "temperature" => 1,
-                "speech_config" => [
-                    "voice_config" => [
-                        "prebuilt_voice_config" => [
-                            "voice_name" => $voice
-                        ]
+                "responseModalities" => ["AUDIO"],
+            ],
+            "speechConfig" => [
+                "voiceConfig" => [
+                    "prebuiltVoiceConfig" => [
+                        "voiceName" => "Zephyr"
                     ]
                 ]
             ]
         ];
 
-        // Google streamGenerateContent tetap bisa diproses via HTTP normal
-        $resp = Http::timeout(60)->post($url, $payload);
+        $resp = Http::timeout(30)->post($url, $payload);
 
-        if (!$resp->successful()) {
+        if ($resp->status() !== 200) {
             return [
-                "error" => $resp->status(),
-                "body" => $resp->json()
+                'error' => $resp->status(),
+                'body' => $resp->json()
             ];
         }
 
-        $json = $resp->json();
+        // Ambil inline audio
+        $inline = data_get($resp->json(), 'candidates.0.content.parts.0.inlineData.data');
 
-        // Ambil inline audio (Google selalu pakai inline_data)
-        $b64 = data_get($json, "candidates.0.content.parts.0.inline_data.data");
-
-        if (!$b64) {
+        if (!$inline) {
             return [
-                "error" => "NO_AUDIO",
-                "body" => $json
+                'error' => 'no_audio',
+                'body' => $resp->json()
             ];
         }
 
-        return base64_decode($b64);
+        return base64_decode($inline);
     }
 }
