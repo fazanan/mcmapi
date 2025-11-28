@@ -10,6 +10,7 @@ use App\Models\CustomerLicense;
 use App\Models\VoiceOverTransaction;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 
 class ScalevWebhookController extends Controller
 {
@@ -200,12 +201,20 @@ class ScalevWebhookController extends Controller
                                     ['name'=>'message','contents'=>$msg],
                                 ]])->post('https://whapify.id/api/send/whatsapp');
                                 $ok = $resp->successful() && ((int)($resp->json('status') ?? 200) === 200);
-                                $lic->delivery_status = $ok ? 'Terkirim' : 'Gagal';
-                                $lic->delivery_log = $ok ? null : ($resp->body() ?? '');
+                                if (Schema::hasColumn('customer_licenses','delivery_status')) {
+                                    $lic->delivery_status = $ok ? 'Terkirim' : 'Gagal';
+                                }
+                                if (Schema::hasColumn('customer_licenses','delivery_log')) {
+                                    $lic->delivery_log = $ok ? null : ($resp->body() ?? '');
+                                }
                                 $lic->save();
                             } catch (\Throwable $e) {
-                                $lic->delivery_status = 'Gagal';
-                                $lic->delivery_log = $e->getMessage();
+                                if (Schema::hasColumn('customer_licenses','delivery_status')) {
+                                    $lic->delivery_status = 'Gagal';
+                                }
+                                if (Schema::hasColumn('customer_licenses','delivery_log')) {
+                                    $lic->delivery_log = $e->getMessage();
+                                }
                                 $lic->save();
                                 Log::error('Send WhatsApp failed: '.$e->getMessage());
                             }

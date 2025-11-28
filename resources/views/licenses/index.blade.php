@@ -28,6 +28,7 @@
       <th>Phone</th>
       <th>Edition</th>
       <th>Payment</th>
+      <th>Delivery</th>
       <th>Product</th>
       <th>TenorDays</th>
       <th>Activated</th>

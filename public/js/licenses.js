@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `<td>${r.Phone || ''}</td>` +
         `<td>${r.Edition || ''}</td>` +
         `<td>${r.PaymentStatus || ''}</td>` +
+        `<td>${r.DeliveryStatus || ''}</td>` +
         `<td>${r.ProductName || ''}</td>` +
         `<td>${r.TenorDays ?? ''}</td>` +
         `<td>${r.IsActivated ? 'Yes' : 'No'}</td>` +

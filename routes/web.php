@@ -53,6 +53,7 @@ Route::get('/api/customerlicense', function (Request $request) {
             'Phone' => $m->phone,
             'Edition' => $m->edition,
             'PaymentStatus' => $m->payment_status,
+            'DeliveryStatus' => $m->delivery_status,
             'ProductName' => $m->product_name,
             'TenorDays' => $m->tenor_days,
             'IsActivated' => (bool)$m->is_activated,
