@@ -96,13 +96,12 @@ class ScalevWebhookController extends Controller
                         if (strlen($recipient) > 0 && $recipient[0] === '8') { $recipient = '62'.$recipient; }
                         $pn = $productName ?: 'produk Anda';
                         $nm = trim((string)($name ?: 'kak'));
-                        $priceRaw = $netRevenue ?? $variantPrice;
-                        $priceFmt = $priceRaw ? number_format((float)$priceRaw, 0, ',', '.') : '...';
-                        $msg = "Hai kak *".$nm."*, 👋\n\n".
+                        $priceFmt = $variantPrice ? number_format((float)$variantPrice, 0, ',', '.') : ($netRevenue ? number_format((float)$netRevenue, 0, ',', '.') : '...');
+                        $msg = "Hai kak *".$nm."*, 👋😊\n\n".
                                "Pesanan *".$pn."* sudah berhasil kami terima.\n\n".
-                               "Supaya kakak *bisa langsung pakai aplikasinya*, silakan selesaikan pembayarannya ya.😊\n\n".
-                               "Totalnya jadi hanya ~897.000~ *".$priceFmt."*.\n".
-                               "Sudah dapat _semua fitur MCM + 3 bonus exclusive_.🚀\n\n".
+                               "Supaya kakak *bisa langsung pakai aplikasinya*, silakan selesaikan pembayarannya ya.🙏\n\n".
+                               "Totalnya dari hanya ~897.000~ menjadi hanya *".$priceFmt."*.\n\n".
+                               "Sudah dapat *_semua Fitur MCM + 3 bonus exclusive_* .🚀\n\n".
                                "Begitu pembayaran sukses, license & bonus otomatis kami kirim.\n\n".
                                "Ada yang ingin ditanyakan?\n".
                                "_Balas chat ini ya, kami siap bantu_.😊\n\n".
