@@ -645,23 +645,34 @@ Route::get('/api/voice/{license}/voice-config', function ($license) {
             'message' => 'Silakan topup dulu',
         ],402);
     }
-    $items = DB::table('ConfigApiKey')
+    $base = DB::table('ConfigApiKey')
         ->whereRaw('LOWER(status) = ?', ['available'])
         ->whereNotNull('ApiKey')
-        ->where('ApiKey','<>','')
-        ->orderByRaw("CASE WHEN LOWER(Model) = 'gemini-2.5-flash-preview-tts' THEN 0 WHEN LOWER(Model) = 'gemini-2.5-pro-preview-tts' THEN 1 ELSE 2 END")
+        ->where('ApiKey','<>','');
+    $prefer = (clone $base)
+        ->whereRaw('LOWER(Model) = ?', ['gemini-2.5-flash-preview-tts'])
         ->orderByDesc('UpdatedAt')
         ->select(['JenisApiKey','ApiKey','DefaultVoiceId','Model'])
-        ->get()
-        ->map(function($x) use ($remain){
-            return [
-                'Provider' => $x->JenisApiKey,
-                'ApiKey' => $x->ApiKey,
-                'DefaultVoiceId' => $x->DefaultVoiceId,
-                'Model' => $x->Model,
-                'SecondsRemaining' => $remain,
-            ];
-        });
+        ->get();
+    if ($prefer->isEmpty()) {
+        $prefer = (clone $base)
+            ->whereRaw('LOWER(Model) = ?', ['gemini-2.5-pro-preview-tts'])
+            ->orderByDesc('UpdatedAt')
+            ->select(['JenisApiKey','ApiKey','DefaultVoiceId','Model'])
+            ->get();
+    }
+    $rows = $prefer->isEmpty()
+        ? (clone $base)->orderByDesc('UpdatedAt')->select(['JenisApiKey','ApiKey','DefaultVoiceId','Model'])->get()
+        : $prefer;
+    $items = $rows->map(function($x) use ($remain){
+        return [
+            'Provider' => $x->JenisApiKey,
+            'ApiKey' => $x->ApiKey,
+            'DefaultVoiceId' => $x->DefaultVoiceId,
+            'Model' => $x->Model,
+            'SecondsRemaining' => $remain,
+        ];
+    });
     return response()->json([
         'ok' => true,
         'license' => $license,
@@ -781,23 +792,34 @@ Route::get('/api/customerlicense/{license}/voice-config', function ($license) {
             'message' => 'Silakan topup dulu',
         ],402);
     }
-    $items = DB::table('ConfigApiKey')
+    $base = DB::table('ConfigApiKey')
         ->whereRaw('LOWER(status) = ?', ['available'])
         ->whereNotNull('ApiKey')
-        ->where('ApiKey','<>','')
-        ->orderByRaw("CASE WHEN LOWER(Model) = 'gemini-2.5-flash-preview-tts' THEN 0 WHEN LOWER(Model) = 'gemini-2.5-pro-preview-tts' THEN 1 ELSE 2 END")
+        ->where('ApiKey','<>','');
+    $prefer = (clone $base)
+        ->whereRaw('LOWER(Model) = ?', ['gemini-2.5-flash-preview-tts'])
         ->orderByDesc('UpdatedAt')
         ->select(['JenisApiKey','ApiKey','DefaultVoiceId','Model'])
-        ->get()
-        ->map(function($x) use ($remain){
-            return [
-                'Provider' => $x->JenisApiKey,
-                'ApiKey' => $x->ApiKey,
-                'DefaultVoiceId' => $x->DefaultVoiceId,
-                'Model' => $x->Model,
-                'SecondsRemaining' => $remain,
-            ];
-        });
+        ->get();
+    if ($prefer->isEmpty()) {
+        $prefer = (clone $base)
+            ->whereRaw('LOWER(Model) = ?', ['gemini-2.5-pro-preview-tts'])
+            ->orderByDesc('UpdatedAt')
+            ->select(['JenisApiKey','ApiKey','DefaultVoiceId','Model'])
+            ->get();
+    }
+    $rows = $prefer->isEmpty()
+        ? (clone $base)->orderByDesc('UpdatedAt')->select(['JenisApiKey','ApiKey','DefaultVoiceId','Model'])->get()
+        : $prefer;
+    $items = $rows->map(function($x) use ($remain){
+        return [
+            'Provider' => $x->JenisApiKey,
+            'ApiKey' => $x->ApiKey,
+            'DefaultVoiceId' => $x->DefaultVoiceId,
+            'Model' => $x->Model,
+            'SecondsRemaining' => $remain,
+        ];
+    });
     return response()->json([
         'ok' => true,
         'license' => $license,
