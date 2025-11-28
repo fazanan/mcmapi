@@ -649,14 +649,16 @@ Route::get('/api/voice/{license}/voice-config', function ($license) {
         ->whereRaw('LOWER(status) = ?', ['available'])
         ->whereNotNull('ApiKey')
         ->where('ApiKey','<>','')
+        ->orderByRaw("CASE WHEN LOWER(Model) = 'gemini-2.5-flash-preview-tts' THEN 0 WHEN LOWER(Model) = 'gemini-2.5-pro-preview-tts' THEN 1 ELSE 2 END")
         ->orderByDesc('UpdatedAt')
-        ->select(['JenisApiKey','ApiKey','DefaultVoiceId'])
+        ->select(['JenisApiKey','ApiKey','DefaultVoiceId','Model'])
         ->get()
         ->map(function($x) use ($remain){
             return [
                 'Provider' => $x->JenisApiKey,
                 'ApiKey' => $x->ApiKey,
                 'DefaultVoiceId' => $x->DefaultVoiceId,
+                'Model' => $x->Model,
                 'SecondsRemaining' => $remain,
             ];
         });
@@ -783,14 +785,16 @@ Route::get('/api/customerlicense/{license}/voice-config', function ($license) {
         ->whereRaw('LOWER(status) = ?', ['available'])
         ->whereNotNull('ApiKey')
         ->where('ApiKey','<>','')
+        ->orderByRaw("CASE WHEN LOWER(Model) = 'gemini-2.5-flash-preview-tts' THEN 0 WHEN LOWER(Model) = 'gemini-2.5-pro-preview-tts' THEN 1 ELSE 2 END")
         ->orderByDesc('UpdatedAt')
-        ->select(['JenisApiKey','ApiKey','DefaultVoiceId'])
+        ->select(['JenisApiKey','ApiKey','DefaultVoiceId','Model'])
         ->get()
         ->map(function($x) use ($remain){
             return [
                 'Provider' => $x->JenisApiKey,
                 'ApiKey' => $x->ApiKey,
                 'DefaultVoiceId' => $x->DefaultVoiceId,
+                'Model' => $x->Model,
                 'SecondsRemaining' => $remain,
             ];
         });
