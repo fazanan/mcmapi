@@ -6,14 +6,15 @@ use Illuminate\Support\Facades\Http;
 
 class GeminiTtsService
 {
-    public function synthesize(string $text, string $voiceName, $keyRow)
+    public function synthesize(string $text, string $voice, $keyRow)
     {
         $model = $keyRow->Model ?? "gemini-2.5-pro-preview-tts";
 
         $url = "https://generativelanguage.googleapis.com/v1beta/models/"
              . urlencode($model)
-             . ":generateContent?key={$keyRow->ApiKey}";
+             . ":streamGenerateContent?key={$keyRow->ApiKey}";
 
+        // === INI 100% CONTEKAN RESMI REST GOOGLE ===
         $payload = [
             "contents" => [
                 [
@@ -24,18 +25,19 @@ class GeminiTtsService
                 ]
             ],
             "generationConfig" => [
+                "responseModalities" => ["audio"],
                 "temperature" => 1,
-                "responseModalities" => ["audio"]
-            ],
-            "speechConfig" => [
-                "voiceConfig" => [
-                    "prebuiltVoiceConfig" => [
-                        "voiceName" => $voiceName   // contoh: "Zephyr"
+                "speech_config" => [
+                    "voice_config" => [
+                        "prebuilt_voice_config" => [
+                            "voice_name" => $voice
+                        ]
                     ]
                 ]
             ]
         ];
 
+        // Google streamGenerateContent tetap bisa diproses via HTTP normal
         $resp = Http::timeout(60)->post($url, $payload);
 
         if (!$resp->successful()) {
@@ -47,8 +49,8 @@ class GeminiTtsService
 
         $json = $resp->json();
 
-        // ambil audio base64
-        $b64 = data_get($json, "candidates.0.content.parts.0.inlineData.data");
+        // Ambil inline audio (Google selalu pakai inline_data)
+        $b64 = data_get($json, "candidates.0.content.parts.0.inline_data.data");
 
         if (!$b64) {
             return [
@@ -57,6 +59,6 @@ class GeminiTtsService
             ];
         }
 
-        return base64_decode($b64);  
+        return base64_decode($b64);
     }
 }
