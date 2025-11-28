@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Http;
 
 class GeminiTtsService
 {
-    public function synthesize(string $text, string $voice1, string $voice2, $keyRow)
+    public function synthesize(string $text, string $voiceName, $keyRow)
     {
         $model = $keyRow->Model ?? "gemini-2.5-pro-preview-tts";
 
@@ -25,54 +25,38 @@ class GeminiTtsService
             ],
             "generationConfig" => [
                 "temperature" => 1,
-                "responseModalities" => ["audio"],
+                "responseModalities" => ["audio"]
             ],
             "speechConfig" => [
-                "multiSpeakerVoiceConfig" => [
-                    "speakerVoiceConfigs" => [
-                        [
-                            "speaker" => "Speaker 1",
-                            "voiceConfig" => [
-                                "prebuiltVoiceConfig" => [
-                                    "voiceName" => $voice1
-                                ]
-                            ]
-                        ],
-                        [
-                            "speaker" => "Speaker 2",
-                            "voiceConfig" => [
-                                "prebuiltVoiceConfig" => [
-                                    "voiceName" => $voice2
-                                ]
-                            ]
-                        ]
+                "voiceConfig" => [
+                    "prebuiltVoiceConfig" => [
+                        "voiceName" => $voiceName   // contoh: "Zephyr"
                     ]
                 ]
             ]
         ];
 
-        $resp = Http::timeout(120)->post($url, $payload);
+        $resp = Http::timeout(60)->post($url, $payload);
 
         if (!$resp->successful()) {
             return [
                 "error" => $resp->status(),
-                "body"  => $resp->json()
+                "body" => $resp->json()
             ];
         }
 
         $json = $resp->json();
 
-        $base64 = data_get($json,
-            "candidates.0.content.parts.0.inlineData.data"
-        );
+        // ambil audio base64
+        $b64 = data_get($json, "candidates.0.content.parts.0.inlineData.data");
 
-        if (!$base64) {
+        if (!$b64) {
             return [
                 "error" => "NO_AUDIO",
                 "body" => $json
             ];
         }
 
-        return base64_decode($base64);
+        return base64_decode($b64);  
     }
 }
