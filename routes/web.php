@@ -7,6 +7,7 @@ use App\Models\VoiceOverTransaction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Http\Controllers\ScalevWebhookController;
+use App\Http\Controllers\VoiceOverController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -682,6 +683,11 @@ Route::get('/api/voice/{license}/voice-config', function ($license) {
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::post('/api/webhooks/scalev', [ScalevWebhookController::class,'handle'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::post('/generate-vo', [VoiceOverController::class,'generate'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+Route::get('/vo-status/{jobId}', [VoiceOverController::class,'status'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::get('/api/whatsappconfig', function (Request $request) {

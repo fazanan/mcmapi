@@ -1,269 +1,229 @@
-    // =========================
-    // ===== VO ENDPOINTS  =====
-    // =========================
+Trae, buatkan sistem lengkap anti-limit 429 untuk Laravel berdasarkan spesifikasi berikut.
+Sistem ini digunakan untuk generate VO (Voice Over) menggunakan Gemini TTS.
+Semua logic wajib menggunakan tabel configapikey berikut, tanpa ubah 1 kolom pun:
 
-    // GET sisa VO (detik & menit)
-    [HttpGet, Route("{orderId}/vo")]
-    public IHttpActionResult GetVoQuota(string orderId)
-    {
-        try
-        {
-            var cs = System.Configuration.ConfigurationManager
-                       .ConnectionStrings["MaximalCuanLicenseDBConnectionString"].ConnectionString;
+CREATE TABLE IF NOT EXISTS `configapikey` (
+  `ApiKeyId` int(11) NOT NULL,
+  `JenisApiKey` varchar(50),
+  `Project` varchar(200),
+  `ApiKey` varchar(500),
+  `DefaultVoiceId` varchar(50),
+  `Model` varchar(100) NOT NULL DEFAULT 'gemini-2.0-flash',
+  `RpmLimit` int(11) NOT NULL DEFAULT 60,
+  `RpdLimit` int(11) NOT NULL DEFAULT 5000,
+  `MinuteCount` int(11) NOT NULL DEFAULT 0,
+  `DayCount` int(11) NOT NULL DEFAULT 0,
+  `MinuteWindowEndPT` datetime NOT NULL DEFAULT current_timestamp(),
+  `DayWindowEndPT` datetime NOT NULL DEFAULT current_timestamp(),
+  `Status` varchar(20) NOT NULL DEFAULT 'AVAILABLE',
+  `CooldownUntilPT` datetime DEFAULT NULL,
+  `UpdatedAt` datetime NOT NULL DEFAULT current_timestamp(),
+  `CreatedAt` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`ApiKeyId`)
+);
 
-            using (var ctx = new MaximalCuanDataContext(cs))
-            {
-                var lic = ctx.Licenses.SingleOrDefault(x => x.OrderId == orderId);
-                if (lic == null) return NotFound();
 
-                var sec = lic.VoSecondsRemaining;
-                return Ok(new
-                {
-                    orderId,
-                    seconds = sec,
-                    minutes = (int)Math.Ceiling(sec / 60.0)
-                });
-            }
-        }
-        catch (Exception ex)
-        {
-            LogError("GetVoQuota failed", ex);
-            return InternalServerError(ex);
-        }
-    }
+Tujuan utama:
 
-    public class VoTopupDto { public int addSeconds { get; set; } }
+Tidak ada lagi error 429
 
-    // TOP-UP detik VO (lifetime)
-    [HttpPost, Route("{orderId}/vo/topup")]
-    public IHttpActionResult TopupVo(string orderId, [FromBody] VoTopupDto dto)
-    {
-        if (dto == null || dto.addSeconds <= 0) return BadRequest("addSeconds must be > 0");
+API key dipakai secara aman & bergiliran
 
-        try
-        {
-            var cs = System.Configuration.ConfigurationManager
-                       .ConnectionStrings["MaximalCuanLicenseDBConnectionString"].ConnectionString;
+User bisa request VO banyak tanpa mematikan API key
 
-            using (var ctx = new MaximalCuanDataContext(cs))
-            {
-                var lic = ctx.Licenses.SingleOrDefault(x => x.OrderId == orderId);
-                if (lic == null) return NotFound();
+Sistem scalable dan stabil seperti CapCut/Canva/ElevenLabs
 
-                lic.VoSecondsRemaining = (lic.VoSecondsRemaining) + dto.addSeconds;
-                ctx.SubmitChanges();
+🎯 TASK UTAMA UNTUK TRAE
+✔ 1. Buat 3 file utama:
+(A) Service:
 
-                var sec = lic.VoSecondsRemaining;
-                return Ok(new
-                {
-                    ok = true,
-                    orderId,
-                    seconds_remaining = sec,
-                    minutes_remaining = (int)Math.Ceiling(sec / 60.0)
-                });
-            }
-        }
-        catch (Exception ex)
-        {
-            LogError("TopupVo failed", ex);
-            return InternalServerError(ex);
-        }
-    }
+app/Services/GeminiTtsService.php
+→ bertugas memanggil Gemini TTS dengan throttle & retry.
 
-    public class VoDebitDto { public int charsVo { get; set; } }
+(B) API Key Selector:
 
-    // DEBIT detik VO (dipanggil setelah file audio berhasil dibuat)
-    [HttpPost, Route("{license}/vo/debit")]
-    public IHttpActionResult DebitVo(string license, [FromBody] VoDebitDto dto)
-    {
-        if (dto == null || dto.charsVo <= 0) return BadRequest("secondsUsed must be > 0");
+app/Services/ApiKeySelector.php
+→ memilih API key terbaik sesuai tabel configapikey.
 
-        try
-        {
-            var cs = System.Configuration.ConfigurationManager
-                       .ConnectionStrings["MaximalCuanLicenseDBConnectionString"].ConnectionString;
+(C) Queue Job:
 
-            using (var ctx = new MaximalCuanDataContext(cs))
-            {
-                var lic = ctx.Licenses.SingleOrDefault(x => x.LicenseKey == license);
-                if (lic == null) return NotFound();
+app/Jobs/GenerateVoJob.php
+→ generate VO via queue, update tabel, simpan file.
 
-                var current = lic.VoSecondsRemaining;
-                if (current <= 0)
-                {
-                    return Content((System.Net.HttpStatusCode)402, new
-                    {
-                        ok = false,
-                        license,
-                        message = "VO credit empty",
-                        seconds_remaining = 0
-                    });
-                }
+🧩 DETAIL REQUIREMENTS
+1. SYSTEM FLOW (WAJIB IKUTI)
+End-to-End Flow
+Client → POST /generate-vo
+Server → simpan job database
+Server → masukkan ke queue "tts"
+Worker → pilih API key terbaik
+Worker → pilih model TTS (fallback)
+Worker → throttle (1 detik per request per key)
+Worker → call Gemini TTS
+Worker → update quota API key
+Worker → simpan file
+Worker → ubah status job
+Client → polling /status/{job_id}
 
-                var debit = Math.Min(current, dto.charsVo);
-                lic.VoSecondsRemaining = current - debit;
-                ctx.SubmitChanges();
+2. LOGIC PEMILIHAN API KEY (WAJIB IKUTI)
+Query harus seperti berikut:
+SELECT *
+FROM configapikey
+WHERE Status = 'AVAILABLE'
+  AND MinuteCount < RpmLimit
+  AND DayCount < RpdLimit
+  AND (CooldownUntilPT IS NULL OR CooldownUntilPT < NOW())
+ORDER BY MinuteCount ASC, DayCount ASC
+FOR UPDATE
+LIMIT 1;
 
-                var remain = lic.VoSecondsRemaining;
-                return Ok(new
-                {
-                    ok = true,
-                    license,
-                    seconds_debited = debit,
-                    seconds_remaining = remain,
-                    minutes_remaining = (int)Math.Ceiling(remain / 60.0)
-                });
-            }
-        }
-        catch (Exception ex)
-        {
-            LogError("DebitVo failed", ex);
-            return InternalServerError(ex);
-        }
-    }
 
-    // GET api/voice/{license}/vo/status
-    [HttpGet, Route("{license}/vo/status")]
-    public IHttpActionResult GetVoStatus(string license)
-    {
-        var cs = System.Configuration.ConfigurationManager
-                    .ConnectionStrings["MaximalCuanLicenseDBConnectionString"].ConnectionString;
+Trae harus implementasikan ini di Laravel Eloquent:
 
-        using (var ctx = new MaximalCuanDataContext(cs))
-        {
-            var lic = ctx.Licenses.SingleOrDefault(x => x.LicenseKey == license);
-            if (lic == null) return NotFound();
+$key = ConfigApiKey::where('Status', 'AVAILABLE')
+    ->where('MinuteCount', '<', DB::raw('RpmLimit'))
+    ->where('DayCount', '<', DB::raw('RpdLimit'))
+    ->where(function ($q) {
+        $q->whereNull('CooldownUntilPT')
+          ->orWhere('CooldownUntilPT', '<', now());
+    })
+    ->orderBy('MinuteCount', 'asc')
+    ->orderBy('DayCount', 'asc')
+    ->lockForUpdate()
+    ->first();
 
-            return Ok(new
-            {
-                ok = true,
-                license,
-                seconds_remaining = lic.VoSecondsRemaining
-            });
-        }
-    }
+3. RESET WINDOW (PAKAI KOLOM YANG ADA)
 
+Sebelum pakai API key, periksa:
+
+Reset window menit
+if ($key->MinuteWindowEndPT < now()) {
+    $key->MinuteCount = 0;
+    $key->MinuteWindowEndPT = now()->addMinute();
 }
 
-// DTOs
-public class UpdateLicenseDto
-{
-    public string OrderId { get; set; }
-    public string Owner { get; set; }
-    public string Email { get; set; }
-    public string Phone { get; set; }
-    public string Edition { get; set; }
-    public string PaymentStatus { get; set; }
-    public string ProductName { get; set; }
-    public int? TenorDays { get; set; }
-    public int? MaxSeats { get; set; }
-    public int? MaxVideo { get; set; }
-    public string Features { get; set; }
-    public string Status { get; set; }
-    public bool? IsActivated { get; set; }
-    public bool? Activated { get; set; }
-    public DateTime? ActivationDateUtc { get; set; }
-    public DateTime? ExpiresAt { get; set; }
-    public DateTime? ExpiresAtUtc { get; set; }
-    public string MachineId { get; set; }
-    public string LicenseKey { get; set; }
-    public int? VoSecondsRemaining { get; set; } // LIFETIME QUOTA (detik)
+Reset window hari
+if ($key->DayWindowEndPT < now()) {
+    $key->DayCount = 0;
+    $key->DayWindowEndPT = now()->addDay();
 }
 
-public class CreateLicenseDto
-{
-    public string OrderId { get; set; }
-    public string Owner { get; set; }
-    public string Email { get; set; }
-    public string Phone { get; set; }
-    public string Edition { get; set; }
-    public string PaymentStatus { get; set; }
-    public string ProductName { get; set; }
-    public int? TenorDays { get; set; }
-    public int? MaxSeats { get; set; }
-    public int? MaxVideo { get; set; }
-    public string Features { get; set; }
-    public string Status { get; set; }
-    public bool? IsActivated { get; set; }
-    public DateTime? ExpiresAt { get; set; }
-    public DateTime? ExpiresAtUtc { get; set; }
-    public string MachineId { get; set; }
-    public int? VoSecondsRemaining { get; set; } // LIFETIME QUOTA (detik)
-}
+4. MODEL TTS YANG VALID
 
-// DTO untuk response
-public class VoiceApiConfigDto
-{
-    public string Provider { get; set; }        // "Gemini" atau "OpenAI"
-    public string ApiKey { get; set; }          // kembalikan kalau memang mau dipakai di client
-    public string DefaultVoiceId { get; set; }
-    public int SecondsRemaining { get; set; }
-}
+Karena hanya ini yang support VO:
 
-[RoutePrefix("api/voice")]   // <— tambahkan prefix yang stabil
-public class VoiceController :ApiController
-{
-    private static void LogError(string message, Exception ex)
-    {
-        try
-        {
-            var path = HostingEnvironment.MapPath("~/App_Data/errors.log");
-            var line = $"{DateTime.UtcNow:u} [{message}] {ex}\r\n";
-            File.AppendAllText(path, line);
-        }
-        catch { }
-    }
+gemini-2.5-flash-preview-tts
+gemini-2.5-pro-preview-tts
 
 
-    [HttpGet, Route("{license}/voice-config")]
-    public IHttpActionResult GetVoiceConfig(string license)
-    {
-        try
-        {
-            var cs = System.Configuration.ConfigurationManager
-                       .ConnectionStrings["MaximalCuanLicenseDBConnectionString"].ConnectionString;
+Jika Model dari tabel bukan salah satu di atas → fallback otomatis ke:
 
-            using (var ctx = new MaximalCuanDataContext(cs))
-            {
-                // Cek license
-                var lic = ctx.Licenses.SingleOrDefault(x => x.LicenseKey == license);
-                if (lic == null) return NotFound();
+gemini-2.5-flash-preview-tts
 
-                // Kalau quota habis
-                if (lic.VoSecondsRemaining <= 0)
-                {
-                    return Content((System.Net.HttpStatusCode)402, new
-                    {
-                        ok = false,
-                        license,
-                        message = "Silakan topup dulu"
-                    });
-                }
+5. CALL GEMINI HARUS ADA THROTTLE
 
-                // Ambil semua API key dari ConfigApiKey
-                var apikeys = ctx.ConfigApiKeys
-                  .Where(x => x.Status == "AVAILABLE" && x.ApiKey != null && x.ApiKey != "")
-                  .OrderByDescending(x => x.UpdatedAt)
-                  .Select(x => new VoiceApiConfigDto
-                  {
-                      Provider = x.JenisApiKey,
-                      ApiKey = x.ApiKey,
-                      DefaultVoiceId = x.DefaultVoiceId,
-                      SecondsRemaining = lic.VoSecondsRemaining
-                  }).ToList();
+Setiap request harus ditahan minimal:
 
-                return Ok(new
-                {
-                    ok = true,
-                    license,
-                    seconds_remaining = lic.VoSecondsRemaining,
-                    apikeys
-                });
-            }
-        }
-        catch (Exception ex)
-        {
-            LogError("GetVoiceConfig failed", ex);
-            return InternalServerError(ex);
-        }
-    }
+1.1 detik per API key
+
+
+Implementasi:
+
+usleep(1100 * 1000);
+
+6. HANDLE ERROR 429 (WAJIB IKUTI)
+
+Jika Gemini lempar error 429:
+
+Ubah status API key:
+
+$key->Status = 'KENA LIMIT';
+$key->CooldownUntilPT = now()->addSeconds(5);
+$key->save();
+
+
+Release job agar dicoba ulang:
+
+return $this->release(3);
+
+7. UPDATE QUOTA API KEY
+
+Setiap sukses:
+
+$key->MinuteCount += 1;
+$key->DayCount += 1;
+$key->UpdatedAt = now();
+$key->save();
+
+8. SIMPAN HASIL VO
+
+Taruh di:
+
+storage/app/public/vo/{job_id}.mp3
+
+Storage::disk('public')->put("vo/{$job->id}.mp3", $audioData);
+
+9. UPDATE STATUS JOB
+
+Set:
+
+status = done
+
+path = vo/xxx.mp3
+
+10. BUATKAN ENDPOINT
+POST /generate-vo
+
+Input:
+
+text, voice, speed
+
+GET /vo-status/{job_id}
+
+Return:
+
+status
+file_url (jika done)
+
+🎁 FILE-FILE YANG HARUS TRAE BUAT
+✔ app/Services/ApiKeySelector.php
+
+Select key
+
+Reset window
+
+Apply lockForUpdate
+
+✔ app/Services/GeminiTtsService.php
+
+Throttle
+
+Error handling
+
+Retry
+
+TTS call
+
+✔ app/Jobs/GenerateVoJob.php
+
+Worker logic keseluruhan
+
+✔ Controller:
+
+VoiceOverController.php
+
+✔ Migration untuk tabel jobs VO
+
+(boleh bernama voice_jobs)
+
+📌 CATATAN PENTING
+
+Jangan ubah struktur tabel configapikey
+
+Gunakan queue driver database/redis
+
+Semua pemanggilan Gemini harus lewat worker, bukan controller
+
+Tidak boleh ada paralel request untuk 1 API key
+
+👇 Selesai. Jalankan sesuai spesifikasi di atas.
