@@ -200,12 +200,15 @@ class ScalevWebhookController extends Controller
                                     ['name'=>'type','contents'=>'text'],
                                     ['name'=>'message','contents'=>$msg],
                                 ]])->post('https://whapify.id/api/send/whatsapp');
-                                $ok = $resp->successful() && ((int)($resp->json('status') ?? 200) === 200);
+                                $code = (int) $resp->status();
+                                $j = null; try { $j = $resp->json(); } catch (\Throwable $__) { $j = null; }
+                                $ok = $code >= 200 && $code < 300 && ((int)($j['status'] ?? $code) === 200);
                                 if (Schema::hasColumn('customer_licenses','delivery_status')) {
                                     $lic->delivery_status = $ok ? 'Terkirim' : 'Gagal';
                                 }
                                 if (Schema::hasColumn('customer_licenses','delivery_log')) {
-                                    $lic->delivery_log = $ok ? null : ($resp->body() ?? '');
+                                    $msgText = is_array($j) ? ($j['message'] ?? null) : null;
+                                    $lic->delivery_log = $ok ? null : ('[HTTP '.$code.'] '.($msgText ?: ($resp->body() ?? '')));
                                 }
                                 $lic->save();
                             } catch (\Throwable $e) {
@@ -213,7 +216,7 @@ class ScalevWebhookController extends Controller
                                     $lic->delivery_status = 'Gagal';
                                 }
                                 if (Schema::hasColumn('customer_licenses','delivery_log')) {
-                                    $lic->delivery_log = $e->getMessage();
+                                    $lic->delivery_log = 'Exception: '.$e->getMessage();
                                 }
                                 $lic->save();
                                 Log::error('Send WhatsApp failed: '.$e->getMessage());

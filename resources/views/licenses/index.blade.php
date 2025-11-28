@@ -29,6 +29,7 @@
       <th>Edition</th>
       <th>Payment</th>
       <th>Delivery</th>
+      <th>Delivery Log</th>
       <th>Product</th>
       <th>TenorDays</th>
       <th>Activated</th>

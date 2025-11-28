@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `<td>${r.Edition || ''}</td>` +
         `<td>${r.PaymentStatus || ''}</td>` +
         `<td>${r.DeliveryStatus || ''}</td>` +
+        `<td>${(r.DeliveryLog || '').substring(0,180)}</td>` +
         `<td>${r.ProductName || ''}</td>` +
         `<td>${r.TenorDays ?? ''}</td>` +
         `<td>${r.IsActivated ? 'Yes' : 'No'}</td>` +
