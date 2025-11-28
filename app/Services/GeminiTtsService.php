@@ -10,34 +10,53 @@ class GeminiTtsService
     {
         $model = $keyRow->Model ?? 'gemini-2.5-pro-preview-tts';
 
-        // Voice fallback aman
-        $voiceName = $voice ?: ($keyRow->DefaultVoiceId ?: 'Verse');
+        $voiceName = $voice ?: ($keyRow->DefaultVoiceId ?? 'Verse');
 
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/' 
-            . urlencode($model) 
-            . ':generateSpeech?key=' 
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+            . urlencode($model)
+            . ':generateSpeech?key='
             . $keyRow->ApiKey;
 
         $payload = [
-            'text' => $text,
-            'voiceConfig' => [
-                'voiceName' => $voiceName
+            'contents' => [
+                [
+                    'role' => 'user',
+                    'parts' => [
+                        ['text' => $text]
+                    ]
+                ]
             ],
             'audioConfig' => [
+                'voiceName' => $voiceName,
                 'audioEncoding' => 'MP3',
                 'speakingRate' => $speed ?? 1.0
             ]
         ];
 
-       $resp = Http::timeout(20)->post($url, $payload);
+        try {
+            $resp = Http::timeout(25)->post($url, $payload);
 
-        // DEBUG: return seluruh response mentah
-        return [
-            'status' => $resp->status(),
-            'body'   => $resp->json(),
-        ];
+            // Jika berhasil → audioBase64 ada di sini
+            if ($resp->successful()) {
+                $json = $resp->json();
+                $base64 = data_get($json, 'audioContent');
 
+                if ($base64) {
+                    return base64_decode($base64);
+                }
+            }
 
-        return null;
+            // Jika gagal → kembalikan error detailnya untuk debugging
+            return [
+                'status' => $resp->status(),
+                'body' => $resp->json(),
+            ];
+
+        } catch (\Throwable $e) {
+            return [
+                'status' => 'exception',
+                'error' => $e->getMessage()
+            ];
+        }
     }
 }
