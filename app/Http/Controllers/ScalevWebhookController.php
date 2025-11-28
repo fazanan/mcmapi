@@ -96,12 +96,13 @@ class ScalevWebhookController extends Controller
                         if (strlen($recipient) > 0 && $recipient[0] === '8') { $recipient = '62'.$recipient; }
                         $pn = $productName ?: 'produk Anda';
                         $nm = trim((string)($name ?: 'kak'));
-                        $msg = "Hai kak ".$nm.", 👋\n\n".
-                               "Pesanan *".$pn."* sudah berhasil kami terima.\n".
-                               "Supaya kakak bisa langsung pakai aplikasinya, silakan selesaikan pembayarannya ya.\n\n".
-                               "Begitu pembayaran sukses, license & bonus otomatis kami kirim.\n".
-                               "Ada yang ingin ditanyakan? Balas chat ini ya, kami siap bantu 😊\n\n".
-                               "_Salam,_\n".
+                        $msg = "Hai kak *".$nm."*, 👋\n\n".
+                               "Pesanan *".$pn."* sudah berhasil kami terima.\n\n".
+                               "Supaya kakak *bisa langsung pakai aplikasinya*, silakan selesaikan pembayarannya ya.😊\n\n".
+                               "Begitu pembayaran sukses, license & bonus otomatis kami kirim.\n\n".
+                               "Ada yang ingin ditanyakan?\n".
+                               "_Balas chat ini ya, kami siap bantu_.😊\n\n".
+                               "_Salam_,\n".
                                "*MCM Admin*";
                         $resp = Http::withOptions(['multipart' => [
                             ['name'=>'secret','contents'=>$cfg->ApiSecret],
