@@ -88,7 +88,7 @@
   </div>
 </div>
 @push('scripts')
-<script src="/js/licenses.js"></script>
+<script src="/js/licenses.js?v=20251128"></script>
 @endpush
 
 <div class="modal fade" id="createModal" tabindex="-1" role="dialog" aria-hidden="true">
