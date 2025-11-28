@@ -13,7 +13,7 @@ class CustomerLicense extends Model
     protected $fillable = [
         'order_id','license_key','owner','email','phone','edition','payment_status','product_name',
         'tenor_days','is_activated','activation_date_utc','expires_at_utc','machine_id',
-        'max_seats','max_video','features','vo_seconds_remaining','status'
+        'max_seats','max_video','features','vo_seconds_remaining','status','delivery_status','delivery_log'
     ];
 
     protected $casts = [

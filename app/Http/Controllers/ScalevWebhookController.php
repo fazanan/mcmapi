@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use App\Models\CustomerLicense;
 use App\Models\VoiceOverTransaction;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Http;
 
 class ScalevWebhookController extends Controller
 {
@@ -174,6 +175,41 @@ class ScalevWebhookController extends Controller
                         $lic->vo_seconds_remaining = (int)($lic->vo_seconds_remaining ?? 0) + (int)$topup;
                         $lic->save();
                         VoiceOverTransaction::create(['license_id'=>$lic->id,'type'=>'topup','seconds'=>$topup]);
+
+                        $cfg = DB::table('WhatsAppConfig')->orderByDesc('UpdatedAt')->first();
+                        if ($cfg && $phone) {
+                            $months = null;
+                            if (!empty($lic->tenor_days) && $lic->tenor_days > 0) {
+                                $months = (int) round($lic->tenor_days / 30);
+                            }
+                            $monthsText = $months ? ($months.' bulan') : 'Akses 6 bulan';
+                            $msg = "Halo kak! Berikut license MCM kakak 🎉\n\n".
+                                   "Nama: ".$lic->owner."\n".
+                                   "Email: ".$lic->email."\n".
+                                   "License: ".$lic->license_key."\n".
+                                   "Masa berlaku: ".$monthsText."\n".
+                                   "Link installer: https://drive.google.com/file/d/1bP08SYrPoGfY82smV1laIarT2Io-azkH/view?usp=sharing\n".
+                                   "Group Whatsapp: https://chat.whatsapp.com/JKa0ASoWRl80oTkt0cVlyd\n\n".
+                                   "Kalau butuh bantuan instalasi, tinggal chat ya. Siap bantu! 🚀";
+                            try {
+                                $resp = Http::withOptions(['multipart' => [
+                                    ['name'=>'secret','contents'=>$cfg->ApiSecret],
+                                    ['name'=>'account','contents'=>$cfg->AccountUniqueId],
+                                    ['name'=>'recipient','contents'=>$phone],
+                                    ['name'=>'type','contents'=>'text'],
+                                    ['name'=>'message','contents'=>$msg],
+                                ]])->post('https://whapify.id/api/send/whatsapp');
+                                $ok = $resp->successful() && ((int)($resp->json('status') ?? 200) === 200);
+                                $lic->delivery_status = $ok ? 'Terkirim' : 'Gagal';
+                                $lic->delivery_log = $ok ? null : ($resp->body() ?? '');
+                                $lic->save();
+                            } catch (\Throwable $e) {
+                                $lic->delivery_status = 'Gagal';
+                                $lic->delivery_log = $e->getMessage();
+                                $lic->save();
+                                Log::error('Send WhatsApp failed: '.$e->getMessage());
+                            }
+                        }
                     }
                 } catch (\Throwable $e) {
                     Log::error('Payment status handler failed: '.$e->getMessage());
