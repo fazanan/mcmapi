@@ -192,23 +192,47 @@ class ScalevWebhookController extends Controller
                                    "Link installer: https://drive.google.com/file/d/1bP08SYrPoGfY82smV1laIarT2Io-azkH/view?usp=sharing\n".
                                    "Group Whatsapp: https://chat.whatsapp.com/JKa0ASoWRl80oTkt0cVlyd\n\n".
                                    "Kalau butuh bantuan instalasi, tinggal chat ya. Siap bantu! 🚀";
+                            $recipientRaw = preg_replace('/[^0-9+]/','', (string)$phone);
+                            $recipient = ltrim($recipientRaw, '+');
+                            if (strlen($recipient) > 0 && $recipient[0] === '0') { $recipient = '62'.substr($recipient,1); }
+                            if (strlen($recipient) > 0 && $recipient[0] === '8') { $recipient = '62'.$recipient; }
                             try {
                                 $resp = Http::withOptions(['multipart' => [
                                     ['name'=>'secret','contents'=>$cfg->ApiSecret],
                                     ['name'=>'account','contents'=>$cfg->AccountUniqueId],
-                                    ['name'=>'recipient','contents'=>$phone],
+                                    ['name'=>'recipient','contents'=>$recipient],
                                     ['name'=>'type','contents'=>'text'],
                                     ['name'=>'message','contents'=>$msg],
                                 ]])->post('https://whapify.id/api/send/whatsapp');
                                 $code = (int) $resp->status();
                                 $j = null; try { $j = $resp->json(); } catch (\Throwable $__) { $j = null; }
                                 $ok = $code >= 200 && $code < 300 && ((int)($j['status'] ?? $code) === 200);
+                                if (!$ok) {
+                                    $resp2 = Http::asForm()->post('https://whapify.id/api/send/whatsapp', [
+                                        'secret' => $cfg->ApiSecret,
+                                        'account' => $cfg->AccountUniqueId,
+                                        'recipient' => $recipient,
+                                        'type' => 'text',
+                                        'message' => $msg,
+                                    ]);
+                                    $code2 = (int) $resp2->status();
+                                    $j2 = null; try { $j2 = $resp2->json(); } catch (\Throwable $__) { $j2 = null; }
+                                    $ok = $code2 >= 200 && $code2 < 300 && ((int)($j2['status'] ?? $code2) === 200);
+                                    if (!$ok && Schema::hasColumn('customer_licenses','delivery_log')) {
+                                        $msgText = is_array($j2) ? ($j2['message'] ?? null) : null;
+                                        $lic->delivery_log = '[HTTP '.$code2.'] '.($msgText ?: ($resp2->body() ?? '')).'; recipient='.$recipient;
+                                    }
+                                }
                                 if (Schema::hasColumn('customer_licenses','delivery_status')) {
                                     $lic->delivery_status = $ok ? 'Terkirim' : 'Gagal';
                                 }
                                 if (Schema::hasColumn('customer_licenses','delivery_log')) {
-                                    $msgText = is_array($j) ? ($j['message'] ?? null) : null;
-                                    $lic->delivery_log = $ok ? null : ('[HTTP '.$code.'] '.($msgText ?: ($resp->body() ?? '')));
+                                    if ($ok) {
+                                        $lic->delivery_log = null;
+                                    } else {
+                                        $msgText = is_array($j) ? ($j['message'] ?? null) : null;
+                                        $lic->delivery_log = '[HTTP '.$code.'] '.($msgText ?: ($resp->body() ?? '')).'; recipient='.$recipient;
+                                    }
                                 }
                                 $lic->save();
                             } catch (\Throwable $e) {
