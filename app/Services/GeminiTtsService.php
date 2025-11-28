@@ -6,10 +6,9 @@ use Illuminate\Support\Facades\Http;
 
 class GeminiTtsService
 {
-    public function synthesize(string $text, ?string $voice, ?float $speed, $keyRow)
+    public function synthesize(string $text, string $voice1, string $voice2, $keyRow)
     {
-        $model = $keyRow->Model ?? 'gemini-2.5-pro-preview-tts';
-        $voiceName = $voice ?: ($keyRow->DefaultVoiceId ?? 'Verse');
+        $model = $keyRow->Model ?? "gemini-2.5-pro-preview-tts";
 
         $url = "https://generativelanguage.googleapis.com/v1beta/models/"
              . urlencode($model)
@@ -20,46 +19,60 @@ class GeminiTtsService
                 [
                     "role" => "user",
                     "parts" => [
-                        [ "text" => $text ]
+                        ["text" => $text]
                     ]
                 ]
             ],
             "generationConfig" => [
-                "responseMimeType" => "audio/mp3"
+                "temperature" => 1,
+                "responseModalities" => ["audio"],
             ],
             "speechConfig" => [
-                "voiceConfig" => [
-                    "voiceName" => $voiceName
-                ],
-                "audioConfig" => [
-                    "speakingRate" => $speed ?? 1.0
+                "multiSpeakerVoiceConfig" => [
+                    "speakerVoiceConfigs" => [
+                        [
+                            "speaker" => "Speaker 1",
+                            "voiceConfig" => [
+                                "prebuiltVoiceConfig" => [
+                                    "voiceName" => $voice1
+                                ]
+                            ]
+                        ],
+                        [
+                            "speaker" => "Speaker 2",
+                            "voiceConfig" => [
+                                "prebuiltVoiceConfig" => [
+                                    "voiceName" => $voice2
+                                ]
+                            ]
+                        ]
+                    ]
                 ]
             ]
         ];
 
-        $resp = Http::timeout(30)->post($url, $payload);
+        $resp = Http::timeout(120)->post($url, $payload);
 
-        if ($resp->status() === 429) {
+        if (!$resp->successful()) {
             return [
-                'error' => 429,
-                'status' => 429,
-                'body' => $resp->json()
+                "error" => $resp->status(),
+                "body"  => $resp->json()
             ];
         }
 
-        if ($resp->status() !== 200) {
+        $json = $resp->json();
+
+        $base64 = data_get($json,
+            "candidates.0.content.parts.0.inlineData.data"
+        );
+
+        if (!$base64) {
             return [
-                'error' => $resp->status(),
-                'status' => $resp->status(),
-                'body' => $resp->json()
+                "error" => "NO_AUDIO",
+                "body" => $json
             ];
         }
 
-        // FIX inlineData
-        $data = data_get($resp->json(), 'candidates.0.content.parts.0.inlineData.data');
-
-        if ($data) return base64_decode($data);
-
-        return null;
+        return base64_decode($base64);
     }
 }
