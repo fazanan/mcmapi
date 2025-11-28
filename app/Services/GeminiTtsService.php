@@ -8,18 +8,13 @@ class GeminiTtsService
 {
     public function synthesize(string $text, ?string $voice, ?float $speed, $keyRow)
     {
-        // Model dari database
-        $model = $keyRow->Model ?? 'gemini-2.5-flash-preview-tts';
-
-        // Voice fallback
+        $model = $keyRow->Model ?? 'gemini-2.5-pro-preview-tts';
         $voiceName = $voice ?: ($keyRow->DefaultVoiceId ?? 'Verse');
 
-        // Endpoint TTS yang benar (SAMA seperti client)
         $url = "https://generativelanguage.googleapis.com/v1beta/models/"
              . urlencode($model)
              . ":generateContent?key={$keyRow->ApiKey}";
 
-        // Payload IDENTIK client
         $payload = [
             "contents" => [
                 [
@@ -30,7 +25,9 @@ class GeminiTtsService
                 ]
             ],
             "generationConfig" => [
-                "responseMimeType" => "audio/mp3",
+                "responseMimeType" => "audio/mp3"
+            ],
+            "speechConfig" => [
                 "voiceConfig" => [
                     "voiceName" => $voiceName
                 ],
@@ -40,10 +37,8 @@ class GeminiTtsService
             ]
         ];
 
-        // Kirim request
         $resp = Http::timeout(30)->post($url, $payload);
 
-        // Jika rate limit
         if ($resp->status() === 429) {
             return [
                 'error' => 429,
@@ -52,7 +47,6 @@ class GeminiTtsService
             ];
         }
 
-        // Jika tidak 200
         if ($resp->status() !== 200) {
             return [
                 'error' => $resp->status(),
@@ -61,14 +55,10 @@ class GeminiTtsService
             ];
         }
 
-        // Ambil inline_data
         $data = data_get($resp->json(), 'candidates.0.content.parts.0.inline_data.data');
 
-        if ($data) {
-            return base64_decode($data);
-        }
+        if ($data) return base64_decode($data);
 
-        // Jika audio tidak ditemukan
         return null;
     }
 }
