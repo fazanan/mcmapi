@@ -9,8 +9,8 @@ class GeminiTtsService
     public function synthesize(string $text, $keyRow)
     {
         // model TTS yang memang ada di API key kamu
-        $model = "gemini-2.5-flash-tts";
-        $url = "https://generativelanguage.googleapis.com/v1beta/{$model}:generateContent?key={$keyRow->ApiKey}";
+        $model = "gemini-2.5-flash-preview-tts";
+        $url = "https://generativelanguage.googleapis.com/v1beta/model/{$model}:streamGenerateContent?key={$keyRow->ApiKey}";
 
         $payload = [
             "contents" => [
