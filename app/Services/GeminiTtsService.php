@@ -10,7 +10,7 @@ class GeminiTtsService
     {
         // model TTS yang memang ada di API key kamu
         $model = "gemini-2.5-flash-preview-tts";
-        $url = "https://generativelanguage.googleapis.com/v1beta/model/{$model}:streamGenerateContent?key={$keyRow->ApiKey}";
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:streamGenerateContent?key={$keyRow->ApiKey}";
 
         $payload = [
             "contents" => [
