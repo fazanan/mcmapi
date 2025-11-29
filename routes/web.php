@@ -440,6 +440,78 @@ Route::delete('/api/configapikey/{id}', function ($id) {
     return response()->json(['ok'=>true]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
+Route::get('/api/configapikey/openai', function (Request $request) {
+    $onlyAvailable = $request->boolean('only_available');
+    $rows = DB::table('ConfigApiKey')
+        ->whereRaw('LOWER(JenisApiKey) = ?', ['openai'])
+        ->whereNotNull('ApiKey')
+        ->where('ApiKey', '<>', '')
+        ->when($onlyAvailable, function ($q) {
+            $q->where('Status', 'AVAILABLE')
+              ->where(function ($qq) {
+                  $qq->whereNull('CooldownUntilPT')
+                     ->orWhere('CooldownUntilPT', '<', now());
+              })
+              ->whereColumn('MinuteCount', '<', 'RpmLimit')
+              ->whereColumn('DayCount', '<', 'RpdLimit');
+        })
+        ->orderByDesc('UpdatedAt')
+        ->get();
+
+    $items = $rows->map(function ($x) {
+        $cool = $x->CooldownUntilPT ? \Illuminate\Support\Carbon::parse($x->CooldownUntilPT)->toISOString() : null;
+        $upd = $x->UpdatedAt ? \Illuminate\Support\Carbon::parse($x->UpdatedAt)->toISOString() : null;
+        return [
+            'ApiKeyId' => $x->ApiKeyId ?? null,
+            'JenisApiKey' => $x->JenisApiKey ?? null,
+            'ApiKey' => $x->ApiKey ?? null,
+            'Model' => $x->Model ?? null,
+            'DefaultVoiceId' => $x->DefaultVoiceId ?? null,
+            'Status' => $x->Status ?? null,
+            'CooldownUntilPT' => $cool,
+            'UpdatedAt' => $upd,
+        ];
+    });
+
+    return response()->json($items);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::get('/api/configapikey/openai/best', function () {
+    $x = DB::table('ConfigApiKey')
+        ->whereRaw('LOWER(JenisApiKey) = ?', ['openai'])
+        ->whereNotNull('ApiKey')
+        ->where('ApiKey', '<>', '')
+        ->where('Status', 'AVAILABLE')
+        ->where(function ($qq) {
+            $qq->whereNull('CooldownUntilPT')
+               ->orWhere('CooldownUntilPT', '<', now());
+        })
+        ->whereColumn('MinuteCount', '<', 'RpmLimit')
+        ->whereColumn('DayCount', '<', 'RpdLimit')
+        ->orderBy('MinuteCount', 'asc')
+        ->orderBy('DayCount', 'asc')
+        ->orderByDesc('UpdatedAt')
+        ->first();
+
+    if (!$x) {
+        return response()->json(['message' => 'No OpenAI key available'], 404);
+    }
+
+    $cool = $x->CooldownUntilPT ? \Illuminate\Support\Carbon::parse($x->CooldownUntilPT)->toISOString() : null;
+    $upd = $x->UpdatedAt ? \Illuminate\Support\Carbon::parse($x->UpdatedAt)->toISOString() : null;
+
+    return response()->json([
+        'ApiKeyId' => $x->ApiKeyId ?? null,
+        'JenisApiKey' => $x->JenisApiKey ?? null,
+        'ApiKey' => $x->ApiKey ?? null,
+        'Model' => $x->Model ?? null,
+        'DefaultVoiceId' => $x->DefaultVoiceId ?? null,
+        'Status' => $x->Status ?? null,
+        'CooldownUntilPT' => $cool,
+        'UpdatedAt' => $upd,
+    ]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
 Route::get('/api/orderdata', function (Request $request) {
     $q = $request->query('q');
     $rows = DB::table('OrderData')
