@@ -24,6 +24,9 @@
       <th>Id</th>
       <th>ApiSecret</th>
       <th>AccountUniqueId</th>
+      <th>GroupLink</th>
+      <th>InstallerLink</th>
+      <th>InstallerVersion</th>
       <th>UpdatedAt (UTC)</th>
     </tr>
   </thead>
@@ -38,6 +41,9 @@
         <input type="hidden" id="E_Id">
         <div class="form-group"><label>ApiSecret</label><input id="E_ApiSecret" type="text" class="form-control"></div>
         <div class="form-group"><label>AccountUniqueId</label><input id="E_AccountUniqueId" type="text" class="form-control"></div>
+        <div class="form-group"><label>GroupLink</label><input id="E_GroupLink" type="text" class="form-control" placeholder="https://chat.whatsapp.com/..."/></div>
+        <div class="form-group"><label>InstallerLink</label><input id="E_InstallerLink" type="text" class="form-control" placeholder="https://..."/></div>
+        <div class="form-group"><label>InstallerVersion</label><input id="E_InstallerVersion" type="text" class="form-control" placeholder="mis. v1.2.3"/></div>
       </div>
       <div class="modal-footer"><button type="submit" class="btn btn-primary">Save</button><button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button></div>
     </form>
@@ -51,6 +57,9 @@
       <div class="modal-body">
         <div class="form-group"><label>ApiSecret</label><input id="C_ApiSecret" type="text" class="form-control"></div>
         <div class="form-group"><label>AccountUniqueId</label><input id="C_AccountUniqueId" type="text" class="form-control"></div>
+        <div class="form-group"><label>GroupLink</label><input id="C_GroupLink" type="text" class="form-control" placeholder="https://chat.whatsapp.com/..."/></div>
+        <div class="form-group"><label>InstallerLink</label><input id="C_InstallerLink" type="text" class="form-control" placeholder="https://..."/></div>
+        <div class="form-group"><label>InstallerVersion</label><input id="C_InstallerVersion" type="text" class="form-control" placeholder="mis. v1.2.3"/></div>
       </div>
       <div class="modal-footer"><button type="submit" class="btn btn-success">Create</button><button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button></div>
     </form>

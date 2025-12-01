@@ -889,7 +889,7 @@ Route::get('/api/whatsappconfig', function (Request $request) {
     $q = $request->query('q');
     $rows = DB::table('WhatsAppConfig')
         ->when($q, function($qr) use ($q){
-            $like = '%'.$q.'%';
+            $like = '%'.$q+'%';
             $qr->where(function($w) use ($like){
                 $w->where('ApiSecret','like',$like)
                   ->orWhere('AccountUniqueId','like',$like);
@@ -904,6 +904,9 @@ Route::get('/api/whatsappconfig', function (Request $request) {
             'Id' => $x->Id,
             'ApiSecret' => $x->ApiSecret,
             'AccountUniqueId' => $x->AccountUniqueId,
+            'GroupLink' => $x->GroupLink ?? null,
+            'InstallerLink' => $x->InstallerLink ?? null,
+            'InstallerVersion' => $x->InstallerVersion ?? null,
             'CreatedAt' => $cr,
             'UpdatedAt' => $up,
         ];
@@ -920,6 +923,9 @@ Route::get('/api/whatsappconfig/{id}', function ($id) {
         'Id' => $x->Id,
         'ApiSecret' => $x->ApiSecret,
         'AccountUniqueId' => $x->AccountUniqueId,
+        'GroupLink' => $x->GroupLink ?? null,
+        'InstallerLink' => $x->InstallerLink ?? null,
+        'InstallerVersion' => $x->InstallerVersion ?? null,
         'CreatedAt' => $cr,
         'UpdatedAt' => $up,
     ]);
