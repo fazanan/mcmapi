@@ -936,6 +936,9 @@ Route::post('/api/whatsappconfig', function (Request $request) {
             'Id' => $idVal,
             'ApiSecret' => $data['ApiSecret'] ?? null,
             'AccountUniqueId' => $data['AccountUniqueId'] ?? null,
+            'GroupLink' => $data['GroupLink'] ?? null,
+            'InstallerLink' => $data['InstallerLink'] ?? null,
+            'InstallerVersion' => $data['InstallerVersion'] ?? null,
             'UpdatedAt' => $now,
             'CreatedAt' => $now,
         ]);
@@ -948,7 +951,7 @@ Route::post('/api/whatsappconfig', function (Request $request) {
 Route::put('/api/whatsappconfig/{id}', function ($id, Request $request) {
     $data = $request->all();
     $upd = ['UpdatedAt' => now('UTC')];
-    foreach (['ApiSecret','AccountUniqueId'] as $f) {
+    foreach (['ApiSecret','AccountUniqueId','GroupLink','InstallerLink','InstallerVersion'] as $f) {
         if (array_key_exists($f,$data)) $upd[$f] = $data[$f];
     }
     $aff = DB::table('WhatsAppConfig')->where('Id',$id)->update($upd);

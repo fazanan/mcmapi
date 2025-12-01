@@ -228,13 +228,18 @@ class ScalevWebhookController extends Controller
                                 $months = (int) round($lic->tenor_days / 30);
                             }
                             $monthsText = $months ? ($months.' bulan') : 'Akses 6 bulan';
+                            $installerLink = $cfg->InstallerLink ?? 'https://drive.google.com/file/d/1bP08SYrPoGfY82smV1laIarT2Io-azkH/view?usp=sharing';
+                            $groupLink = $cfg->GroupLink ?? 'https://chat.whatsapp.com/JKa0ASoWRl80oTkt0cVlyd';
+                            $version = trim((string)($cfg->InstallerVersion ?? ''));
+                            $verLine = $version !== '' ? ("Versi installer: ".$version."\n") : '';
                             $msg = "Halo kak! Berikut license MCM kakak 🎉\n\n".
                                    "Nama: ".$lic->owner."\n".
                                    "Email: ".$lic->email."\n".
                                    "License: ".$lic->license_key."\n".
                                    "Masa berlaku: ".$monthsText."\n".
-                                   "Link installer: https://drive.google.com/file/d/1bP08SYrPoGfY82smV1laIarT2Io-azkH/view?usp=sharing\n".
-                                   "Group Whatsapp: https://chat.whatsapp.com/JKa0ASoWRl80oTkt0cVlyd\n\n".
+                                   $verLine.
+                                   "Link installer: ".$installerLink."\n".
+                                   "Group Whatsapp: ".$groupLink."\n\n".
                                    "Kalau butuh bantuan instalasi, tinggal chat ya. Siap bantu! 🚀";
                             $recipientRaw = preg_replace('/[^0-9+]/','', (string)$phone);
                             $recipient = ltrim($recipientRaw, '+');
