@@ -241,8 +241,9 @@ Route::post('/api/license/activate', function (Request $request) {
     $email = trim((string)($request->input('Email') ?? $request->input('email')));
     $mid = trim((string)($request->input('MachineId') ?? $request->input('machineId') ?? $request->input('MachineID') ?? $request->input('mid')));
     $sig = trim((string)($request->input('Signature') ?? $request->input('signature') ?? $request->input('sig')));
-    if (!$key || !$email || !$mid || !$sig) {
-        return response()->json(['Success'=>false,'Message'=>'LicenseKey, Email, MachineId, dan Signature wajib diisi.','ErrorCode'=>'INVALID_REQUEST'],400);
+    // MachineId dibuat opsional: cukup LicenseKey, Email, dan Signature
+    if (!$key || !$email || !$sig) {
+        return response()->json(['Success'=>false,'Message'=>'LicenseKey, Email, dan Signature wajib diisi.','ErrorCode'=>'INVALID_REQUEST'],400);
     }
     $lic = CustomerLicense::query()->where('license_key',$key)->first();
     if (!$lic) {
@@ -284,7 +285,8 @@ Route::post('/api/license/activate', function (Request $request) {
         }
     }
     $lic->status = 'Active';
-    $lic->machine_id = $mid;
+    // Simpan MachineId hanya jika dikirim klien
+    if (strlen($mid) > 0) { $lic->machine_id = $mid; }
     $lic->activation_date_utc = now('UTC');
     $lic->is_activated = true;
     $lic->expires_at_utc = $expires;
@@ -305,8 +307,8 @@ Route::post('/api/license/activate', function (Request $request) {
             'edition' => $editionVal,
             'edtion' => $editionVal,
             'Edition' => $editionVal,
-            'machineId' => $mid,
-            'MachineId' => $mid,
+            'machineId' => $lic->machine_id,
+            'MachineId' => $lic->machine_id,
             'LicenseKey' => $lic->license_key,
             'Email' => $lic->email,
             'email' => $lic->email,
