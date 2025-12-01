@@ -675,26 +675,7 @@ Route::post('/api/customerlicense/{id}/reset', function ($id, Request $request) 
         if (!$ok) return response()->json(['Success'=>false,'Message'=>'Signature tidak valid.','ErrorCode'=>'INVALID_SIGNATURE'],400);
     }
 
-// Endpoint debug: preview berbagai bentuk signature yang diharapkan
-Route::post('/api/license/signature/preview', function (Request $request) {
-    $key = trim((string)($request->input('LicenseKey') ?? $request->input('licenseKey') ?? $request->input('license') ?? $request->input('key')));
-    $email = trim((string)($request->input('Email') ?? $request->input('email')));
-    $mid = trim((string)($request->input('MachineId') ?? $request->input('machineId') ?? $request->input('MachineID') ?? $request->input('mid')));
-    if (!$key || !$email) return response()->json(['ok'=>false,'message'=>'LicenseKey dan Email wajib diisi.'],400);
-    $variants = [
-        'License|MachineId|Email' => $key.'|'.$mid.'|'.$email,
-        'License|Email' => $key.'|'.$email,
-        'License||Email' => $key.'||'.$email,
-        'License|Email|MachineId' => $key.'|'.$email.'|'.$mid,
-    ];
-    $out = [];
-    foreach ($variants as $name=>$canon) {
-        $hex = hash('sha256', $canon);
-        $b64 = base64_encode(hash('sha256', $canon, true));
-        $out[$name] = ['input'=>$canon,'hex'=>$hex,'base64'=>$b64];
-    }
-    return response()->json(['ok'=>true,'variants'=>$out]);
-})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+// (dipindah ke luar closure route di bawah)
     $lic->status = 'Reset';
     $lic->is_activated = false;
     $lic->activation_date_utc = null;
@@ -725,6 +706,26 @@ Route::post('/api/license/signature/preview', function (Request $request) {
             'ExpiresAt' => optional($lic->expires_at_utc)->toISOString(),
         ],
     ],200);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+// Endpoint debug: preview berbagai bentuk signature yang diharapkan
+Route::post('/api/license/signature/preview', function (Request $request) {
+    $key = trim((string)($request->input('LicenseKey') ?? $request->input('licenseKey') ?? $request->input('license') ?? $request->input('key')));
+    $email = trim((string)($request->input('Email') ?? $request->input('email')));
+    $mid = trim((string)($request->input('MachineId') ?? $request->input('machineId') ?? $request->input('MachineID') ?? $request->input('mid')));
+    if (!$key || !$email) return response()->json(['ok'=>false,'message'=>'LicenseKey dan Email wajib diisi.'],400);
+    $variants = [
+        'License|MachineId|Email' => $key.'|'.$mid.'|'.$email,
+        'License|Email' => $key.'|'.$email,
+        'License||Email' => $key.'||'.$email,
+        'License|Email|MachineId' => $key.'|'.$email.'|'.$mid,
+    ];
+    $out = [];
+    foreach ($variants as $name=>$canon) {
+        $hex = hash('sha256', $canon);
+        $b64 = base64_encode(hash('sha256', $canon, true));
+        $out[$name] = ['input'=>$canon,'hex'=>$hex,'base64'=>$b64];
+    }
+    return response()->json(['ok'=>true,'variants'=>$out]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 Route::post('/api/license/generate', function (Request $request) {
     $email = $request->input('Email');
