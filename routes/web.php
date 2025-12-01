@@ -9,6 +9,36 @@ use Illuminate\Support\Str;
 use App\Http\Controllers\ScalevWebhookController;
 use App\Http\Controllers\VoiceOverController;
 
+// Helper verifikasi signature yang toleran format
+if (!function_exists('verifySignatureFlexible')) {
+    function verifySignatureFlexible(string $input, string $sig): bool {
+        $expectedHex = hash('sha256', $input);
+        $expectedBin = hash('sha256', $input, true);
+        $expectedB64 = base64_encode($expectedBin);
+        $s = trim((string)$sig);
+        // Cocok hex (case-insensitive)
+        if (hash_equals($expectedHex, strtolower($s))) { return true; }
+        // Cocok base64 digest biner
+        if (hash_equals($expectedB64, $s)) { return true; }
+        // Hex dengan strip/spasi
+        $hexCandidate = strtolower(str_replace(['-', ' ', "\t"], '', $s));
+        if (ctype_xdigit($hexCandidate) && strlen($hexCandidate) === 64) {
+            if (hash_equals($expectedHex, $hexCandidate)) { return true; }
+        }
+        // Base64 url-safe atau base64 dari teks hex
+        $b64Candidate = strtr($s, '-_', '+/');
+        $decoded = base64_decode($b64Candidate, true);
+        if ($decoded !== false) {
+            // Jika hasil decode adalah digest biner
+            if (hash_equals($expectedBin, $decoded)) { return true; }
+            // Jika hasil decode adalah teks hex (base64 dari hex string)
+            if (ctype_xdigit($decoded) && strlen($decoded) === 64) {
+                if (hash_equals($expectedHex, strtolower($decoded))) { return true; }
+            }
+        }
+        return false;
+    }
+}
 Route::get('/', function () {
     return view('welcome');
 });
@@ -226,9 +256,14 @@ Route::post('/api/license/activate', function (Request $request) {
         DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Activate','result'=>'Failed','message'=>'Email tidak sesuai.','created_at'=>now(),'updated_at'=>now()]);
         return response()->json(['Success'=>false,'Message'=>'Email tidak sesuai.','ErrorCode'=>'EMAIL_MISMATCH'],400);
     }
-    $expectedHex = hash('sha256', $key.'|'.$mid.'|'.$email);
-    $expectedB64 = base64_encode(hash('sha256', $key.'|'.$mid.'|'.$email, true));
-    if (!hash_equals($expectedHex, $sig) && !hash_equals($expectedB64, $sig)) {
+    // Terima signature normal (License|MachineId|Email). Jika gagal, abaikan MachineId.
+    $inputs = [
+        $key.'|'.$mid.'|'.$email,
+        $key.'|'.$email,
+        $key.'||'.$email,
+    ];
+    $ok = false; foreach ($inputs as $canon) { if (verifySignatureFlexible($canon, $sig)) { $ok = true; break; } }
+    if (!$ok) {
         DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Activate','result'=>'Failed','message'=>'Signature tidak valid.','created_at'=>now(),'updated_at'=>now()]);
         return response()->json(['Success'=>false,'Message'=>'Signature tidak valid.','ErrorCode'=>'INVALID_SIGNATURE'],400);
     }
@@ -293,9 +328,14 @@ Route::match(['GET','POST'],'/api/license/reset', function (Request $request) {
         DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Failed','message'=>'Email tidak sesuai.','created_at'=>now(),'updated_at'=>now()]);
         return response()->json(['Success'=>false,'Message'=>'Email tidak sesuai.','ErrorCode'=>'EMAIL_MISMATCH'],400);
     }
-    $expectedHex = hash('sha256', $key.'|'.($lic->machine_id ?? '').'|'.$email);
-    $expectedB64 = base64_encode(hash('sha256', $key.'|'.($lic->machine_id ?? '').'|'.$email, true));
-    if (!hash_equals($expectedHex, $sig) && !hash_equals($expectedB64, $sig)) {
+    // Terima signature normal (License|MachineId|Email). Jika gagal, abaikan MachineId.
+    $inputs = [
+        $key.'|'.($lic->machine_id ?? '').'|'.$email,
+        $key.'|'.$email,
+        $key.'||'.$email,
+    ];
+    $ok = false; foreach ($inputs as $canon) { if (verifySignatureFlexible($canon, $sig)) { $ok = true; break; } }
+    if (!$ok) {
         DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Failed','message'=>'Signature tidak valid.','created_at'=>now(),'updated_at'=>now()]);
         return response()->json(['Success'=>false,'Message'=>'Signature tidak valid.','ErrorCode'=>'INVALID_SIGNATURE'],400);
     }
@@ -618,9 +658,14 @@ Route::post('/api/customerlicense/{id}/reset', function ($id, Request $request) 
     if (!$lic) return response()->json(['Success'=>false,'Message'=>'Not found','ErrorCode'=>'LICENSE_NOT_FOUND'],404);
     if ($email && strcasecmp((string)$lic->email,$email)!==0) return response()->json(['Success'=>false,'Message'=>'Email tidak sesuai.','ErrorCode'=>'EMAIL_MISMATCH'],400);
     if ($sig) {
-        $expectedHex = hash('sha256', ($lic->license_key ?? '').'|'.($lic->machine_id ?? '').'|'.($email ?: $lic->email ?? ''));
-        $expectedB64 = base64_encode(hash('sha256', ($lic->license_key ?? '').'|'.($lic->machine_id ?? '').'|'.($email ?: $lic->email ?? ''), true));
-        if (!hash_equals($expectedHex, $sig) && !hash_equals($expectedB64, $sig)) return response()->json(['Success'=>false,'Message'=>'Signature tidak valid.','ErrorCode'=>'INVALID_SIGNATURE'],400);
+        // Terima signature normal (License|MachineId|Email). Jika gagal, abaikan MachineId.
+        $inputs = [
+            ($lic->license_key ?? '').'|'.($lic->machine_id ?? '').'|'.($email ?: $lic->email ?? ''),
+            ($lic->license_key ?? '').'|'.($email ?: $lic->email ?? ''),
+            ($lic->license_key ?? '').'||'.($email ?: $lic->email ?? ''),
+        ];
+        $ok = false; foreach ($inputs as $canon) { if (verifySignatureFlexible($canon, $sig)) { $ok = true; break; } }
+        if (!$ok) return response()->json(['Success'=>false,'Message'=>'Signature tidak valid.','ErrorCode'=>'INVALID_SIGNATURE'],400);
     }
     $lic->status = 'Reset';
     $lic->is_activated = false;
