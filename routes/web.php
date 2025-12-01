@@ -25,8 +25,9 @@ if (!function_exists('verifySignatureFlexible')) {
         if (ctype_xdigit($hexCandidate) && strlen($hexCandidate) === 64) {
             if (hash_equals($expectedHex, $hexCandidate)) { return true; }
         }
-        // Base64 url-safe atau base64 dari teks hex
+        // Base64 url-safe atau base64 dari teks hex (terima tanpa padding)
         $b64Candidate = strtr($s, '-_', '+/');
+        $pad = strlen($b64Candidate) % 4; if ($pad) { $b64Candidate .= str_repeat('=', 4 - $pad); }
         $decoded = base64_decode($b64Candidate, true);
         if ($decoded !== false) {
             // Jika hasil decode adalah digest biner
@@ -256,11 +257,13 @@ Route::post('/api/license/activate', function (Request $request) {
         DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Activate','result'=>'Failed','message'=>'Email tidak sesuai.','created_at'=>now(),'updated_at'=>now()]);
         return response()->json(['Success'=>false,'Message'=>'Email tidak sesuai.','ErrorCode'=>'EMAIL_MISMATCH'],400);
     }
-    // Terima signature normal (License|MachineId|Email). Jika gagal, abaikan MachineId.
+    // Terima signature normal (License|MachineId|Email). Jika gagal, abaikan MachineId,
+    // atau coba urutan alternatif (License|Email|MachineId) untuk kompatibilitas klien lama.
     $inputs = [
         $key.'|'.$mid.'|'.$email,
         $key.'|'.$email,
         $key.'||'.$email,
+        $key.'|'.$email.'|'.$mid,
     ];
     $ok = false; foreach ($inputs as $canon) { if (verifySignatureFlexible($canon, $sig)) { $ok = true; break; } }
     if (!$ok) {
@@ -328,11 +331,13 @@ Route::match(['GET','POST'],'/api/license/reset', function (Request $request) {
         DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Failed','message'=>'Email tidak sesuai.','created_at'=>now(),'updated_at'=>now()]);
         return response()->json(['Success'=>false,'Message'=>'Email tidak sesuai.','ErrorCode'=>'EMAIL_MISMATCH'],400);
     }
-    // Terima signature normal (License|MachineId|Email). Jika gagal, abaikan MachineId.
+    // Terima signature normal (License|MachineId|Email). Jika gagal, abaikan MachineId,
+    // atau coba urutan alternatif (License|Email|MachineId).
     $inputs = [
         $key.'|'.($lic->machine_id ?? '').'|'.$email,
         $key.'|'.$email,
         $key.'||'.$email,
+        $key.'|'.$email.'|'.($lic->machine_id ?? ''),
     ];
     $ok = false; foreach ($inputs as $canon) { if (verifySignatureFlexible($canon, $sig)) { $ok = true; break; } }
     if (!$ok) {
@@ -658,15 +663,38 @@ Route::post('/api/customerlicense/{id}/reset', function ($id, Request $request) 
     if (!$lic) return response()->json(['Success'=>false,'Message'=>'Not found','ErrorCode'=>'LICENSE_NOT_FOUND'],404);
     if ($email && strcasecmp((string)$lic->email,$email)!==0) return response()->json(['Success'=>false,'Message'=>'Email tidak sesuai.','ErrorCode'=>'EMAIL_MISMATCH'],400);
     if ($sig) {
-        // Terima signature normal (License|MachineId|Email). Jika gagal, abaikan MachineId.
+        // Terima signature normal (License|MachineId|Email). Jika gagal, abaikan MachineId,
+        // atau coba urutan alternatif (License|Email|MachineId).
         $inputs = [
             ($lic->license_key ?? '').'|'.($lic->machine_id ?? '').'|'.($email ?: $lic->email ?? ''),
             ($lic->license_key ?? '').'|'.($email ?: $lic->email ?? ''),
             ($lic->license_key ?? '').'||'.($email ?: $lic->email ?? ''),
+            ($lic->license_key ?? '').'|'.($email ?: $lic->email ?? '').'|'.($lic->machine_id ?? ''),
         ];
         $ok = false; foreach ($inputs as $canon) { if (verifySignatureFlexible($canon, $sig)) { $ok = true; break; } }
         if (!$ok) return response()->json(['Success'=>false,'Message'=>'Signature tidak valid.','ErrorCode'=>'INVALID_SIGNATURE'],400);
     }
+
+// Endpoint debug: preview berbagai bentuk signature yang diharapkan
+Route::post('/api/license/signature/preview', function (Request $request) {
+    $key = trim((string)($request->input('LicenseKey') ?? $request->input('licenseKey') ?? $request->input('license') ?? $request->input('key')));
+    $email = trim((string)($request->input('Email') ?? $request->input('email')));
+    $mid = trim((string)($request->input('MachineId') ?? $request->input('machineId') ?? $request->input('MachineID') ?? $request->input('mid')));
+    if (!$key || !$email) return response()->json(['ok'=>false,'message'=>'LicenseKey dan Email wajib diisi.'],400);
+    $variants = [
+        'License|MachineId|Email' => $key.'|'.$mid.'|'.$email,
+        'License|Email' => $key.'|'.$email,
+        'License||Email' => $key.'||'.$email,
+        'License|Email|MachineId' => $key.'|'.$email.'|'.$mid,
+    ];
+    $out = [];
+    foreach ($variants as $name=>$canon) {
+        $hex = hash('sha256', $canon);
+        $b64 = base64_encode(hash('sha256', $canon, true));
+        $out[$name] = ['input'=>$canon,'hex'=>$hex,'base64'=>$b64];
+    }
+    return response()->json(['ok'=>true,'variants'=>$out]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
     $lic->status = 'Reset';
     $lic->is_activated = false;
     $lic->activation_date_utc = null;
