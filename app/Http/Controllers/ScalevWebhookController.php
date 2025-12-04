@@ -68,34 +68,55 @@ class ScalevWebhookController extends Controller
         $name  = $dest['name']  ?? $data['customer_name']  ?? $data['name']  ?? null;
         $phone = $dest['phone'] ?? $data['customer_phone'] ?? $data['phone'] ?? null;
 
+        // Normalize and safe defaults
+        $email = $email ? strtolower(trim($email)) : null;
+        $name = $name ? trim($name) : null;
+        $phone = $phone ? trim($phone) : null;
+
         $user = null;
         $created = false;
         $plainPassword = null;
 
         if ($isPaidTransition) {
             // Create or update user only when transitioning to paid
-            $user = User::where('email', $email)->first();
-            if (!$user) {
-                $created = true;
-                $plainPassword = Str::random(12);
-                $user = new User();
-                $user->name = $name;
-                $user->email = $email;
-                $user->phone = $phone;
-                $user->role = 'member';
-                $user->password = Hash::make($plainPassword);
-                $user->save();
+            if ($email) {
+                $user = User::where('email', $email)->first();
+                if (!$user) {
+                    $created = true;
+                    $plainPassword = Str::random(12);
+                    $user = new User();
+                    // Fallback name if missing: use local part of email or 'Member'
+                    if (!$name) {
+                        $local = strstr($email, '@', true);
+                        $name = $local ?: 'Member';
+                    }
+                    $user->name = $name;
+                    $user->email = $email;
+                    $user->phone = $phone;
+                    $user->role = 'member';
+                    $user->password = Hash::make($plainPassword);
+                    $user->save();
 
-                Log::info('ScaleV webhook created member', [
-                    'email' => $email,
-                    // Do NOT log plaintext password in production. Shown here for handoff purposes only.
-                ]);
+                    Log::info('ScaleV webhook created member', [
+                        'email' => $email,
+                        // Do NOT log plaintext password in production.
+                    ]);
+                } else {
+                    // Ensure role and profile data are up to date; also fallback name if currently null
+                    if (!$name) {
+                        $local = strstr($email, '@', true);
+                        $name = $local ?: ($user->name ?: 'Member');
+                    }
+                    $user->name = $name;
+                    $user->phone = $phone;
+                    $user->role = 'member';
+                    $user->save();
+                }
             } else {
-                // Ensure role and profile data are up to date
-                $user->name = $name;
-                $user->phone = $phone;
-                $user->role = 'member';
-                $user->save();
+                // Missing email: cannot create user, but order will still be logged below
+                Log::warning('ScaleV paid event missing email; skipping user creation', [
+                    'order_id' => $data['order_id'] ?? null,
+                ]);
             }
         }
 
@@ -159,7 +180,17 @@ class ScalevWebhookController extends Controller
             ], 200);
         }
 
-        // For paid transition, return user-centric payload
+        // For paid transition, return user-centric payload if user exists, else logged_no_user
+        if (!$user) {
+            return response()->json([
+                'ok' => true,
+                'result' => 'logged_no_user',
+                'reason' => 'missing_email',
+                'order_id' => $orderId,
+                'status' => $statusText,
+            ], 200);
+        }
+
         return response()->json([
             'ok' => true,
             'result' => $created ? 'created' : 'updated',
