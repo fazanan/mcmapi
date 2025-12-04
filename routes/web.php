@@ -6,8 +6,9 @@ use App\Models\CustomerLicense;
 use App\Models\VoiceOverTransaction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use App\Http\Controllers\ScalevWebhookController;
 use App\Http\Controllers\VoiceOverController;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ScalevWebhookController;
 
 // Helper verifikasi signature yang toleran format
 if (!function_exists('verifySignatureFlexible')) {
@@ -41,24 +42,47 @@ if (!function_exists('verifySignatureFlexible')) {
     }
 }
 Route::get('/', function () {
-    return view('welcome');
+    if (auth()->check()) {
+        return redirect('/produk');
+    }
+    return redirect('/login');
 });
+
+// Auth routes
+Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+Route::post('/login', [AuthController::class, 'login']);
+Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth');
 
 Route::get('/licenses', function () {
     return view('licenses.index');
-});
+})->middleware(['auth','role:admin']);
 
 Route::get('/config-keys', function () {
     return view('configapikey.index');
-});
+})->middleware(['auth','role:admin']);
 
 Route::get('/orders', function () {
     return view('orderdata.index');
-});
+})->middleware(['auth','role:admin']);
 
 Route::get('/whatsapp-config', function () {
     return view('whatsappconfig.index');
-});
+})->middleware(['auth','role:admin']);
+
+// Member-accessible Produk page
+Route::get('/produk', function () {
+    return view('produk.index');
+})->middleware(['auth']);
+
+// Admin-only Users page
+Route::get('/users', function () {
+    $users = \App\Models\User::query()->orderBy('created_at','desc')->get();
+    return view('users.index', ['users' => $users]);
+})->middleware(['auth','role:admin']);
+
+// ScaleV webhook: create member access when status transitions to paid
+Route::post('/webhooks/scalev', [ScalevWebhookController::class, 'handle'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::get('/api/customerlicense', function (Request $request) {
     $q = $request->query('q');

@@ -1,0 +1,34 @@
+/* MCM theme: gradient blue-teal matching logo */
+:root {
+  --mcm-primary: #0aa2ff; /* blue */
+  --mcm-accent: #12c2a4;  /* teal */
+  --mcm-dark: #0f2b3a;    /* dark navy */
+  --mcm-light: #f8fafc;
+}
+
+body { background-color: var(--mcm-light); }
+
+.mcm-sidebar {
+  width: 260px;
+  min-height: 100vh;
+  background: linear-gradient(180deg, var(--mcm-primary), var(--mcm-accent));
+  color: #fff;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+.mcm-brand { display: flex; align-items: center; margin-bottom: 12px; gap: 12px; }
+.mcm-logo { width: 28px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, #0aa2ff, #12c2a4); display:inline-block; }
+.mcm-title { font-weight: 700; line-height: 1; }
+.mcm-subtitle { font-size: 12px; opacity: .9; }
+.mcm-sidebar .nav-link { color: #fff; padding: 8px 0; border-radius: 4px; }
+.mcm-sidebar .nav-link:hover { background-color: rgba(255,255,255,.15); }
+.mcm-sidebar .nav-link.active { background-color: rgba(255,255,255,.25); font-weight: 600; }
+.mcm-user { border-top: 1px solid rgba(255,255,255,.25); padding-top: 12px; }
+
+.mcm-content { flex: 1; }
+
+/* Buttons */
+.btn-primary { background-color: var(--mcm-primary); border-color: var(--mcm-primary); }
+.btn-outline-light { border-color: #fff; color: #fff; }
+.btn-outline-light:hover { background-color: #fff; color: var(--mcm-dark); }
