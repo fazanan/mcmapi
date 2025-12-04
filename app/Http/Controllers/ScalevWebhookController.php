@@ -192,9 +192,16 @@ class ScalevWebhookController extends Controller
         }
 
         // Paid transition: generate or update license tied to this order
-        // 1) Parse edition dari nama produk: ambil kata di antara tanda '-' pertama dan kedua
+        // Ambil data order dari tabel OrderData agar konsisten (Owner/Email/Phone/Product)
+        $orderRow = DB::table('OrderData')->where('OrderId', $orderId)->first();
+        $orderEmail = $orderRow->Email ?? null;
+        $orderName  = $orderRow->Name ?? null;
+        $orderPhone = $orderRow->Phone ?? null;
+        $productFromOrder = $orderRow->ProductName ?? null;
+
+        // Gunakan Product dari tabel OrderData sebagai sumber utama parsing
         $edition = null;
-        $rawProduct = (string)($productName ?? '');
+        $rawProduct = (string)($productFromOrder ?? $productName ?? '');
         if (preg_match('/\s-\s*([^\-\)]+?)\s-\s*/u', $rawProduct, $m)) {
             $edition = trim($m[1]);
         }
@@ -218,18 +225,23 @@ class ScalevWebhookController extends Controller
 
         $lic = CustomerLicense::query()->where('order_id', $orderId)->first();
         if (!$lic) {
-            $newKey = strtoupper(Str::uuid()->toString());
-            // Fallback owner if name/email missing
-            $ownerName = $name ?: ($email ? (strstr($email, '@', true) ?: 'Member') : 'Member');
+            // License format: MCM-(kombinasi angka dan huruf random) 8 karakter
+            $newKey = 'MCM-' . Str::upper(Str::random(8));
+            // Owner/Email/Phone ambil dari OrderData berdasarkan OrderId; fallback ke payload bila kosong
+            $ownerSourceEmail = $orderEmail ?? $email;
+            $ownerName = $orderName ?: ($ownerSourceEmail ? (strstr($ownerSourceEmail, '@', true) ?: 'Member') : 'Member');
+            $finalEmail = $orderEmail ?? $email;
+            $finalPhone = $orderPhone ?? $phone;
+            $finalProduct = $productFromOrder ?? $productName;
             $lic = CustomerLicense::create([
                 'order_id' => $orderId,
                 'license_key' => $newKey,
                 'owner' => $ownerName,
-                'email' => $email,
-                'phone' => $phone,
+                'email' => $finalEmail,
+                'phone' => $finalPhone,
                 'edition' => $edition,
                 'payment_status' => 'paid',
-                'product_name' => $productName,
+                'product_name' => $finalProduct,
                 'tenor_days' => $validityDays,
                 'expires_at_utc' => $expires,
                 'max_seats' => 1,
@@ -241,7 +253,7 @@ class ScalevWebhookController extends Controller
             DB::table('license_actions')->insert([
                 'license_key' => $lic->license_key,
                 'order_id' => $lic->order_id,
-                'email' => $email,
+                'email' => $finalEmail,
                 'action' => 'Generate',
                 'result' => 'Success',
                 'message' => 'License '.$edition.' generated for paid order.',
@@ -250,18 +262,19 @@ class ScalevWebhookController extends Controller
             ]);
         } else {
             $updates = [
-                'owner' => $name ?: ($lic->owner ?: ($email ? (strstr($email, '@', true) ?: 'Member') : 'Member')),
-                'email' => $email ?? $lic->email,
-                'phone' => $phone ?? $lic->phone,
+                // Prefer data dari OrderData; fallback ke payload
+                'owner' => ($orderName ?: $name) ?: ($lic->owner ?: (($orderEmail ?? $email) ? (strstr(($orderEmail ?? $email), '@', true) ?: 'Member') : 'Member')),
+                'email' => ($orderEmail ?? $email) ?? $lic->email,
+                'phone' => ($orderPhone ?? $phone) ?? $lic->phone,
                 'edition' => $lic->edition ?: $edition,
                 'payment_status' => 'paid',
-                'product_name' => $productName ?? $lic->product_name,
+                'product_name' => ($productFromOrder ?? $productName) ?? $lic->product_name,
                 'tenor_days' => $lic->tenor_days ?: $validityDays,
                 'features' => $lic->features ?: $featuresJson,
                 'status' => $lic->status ?: 'InActive',
             ];
             // Only set license key and expires if currently empty
-            if (empty($lic->license_key)) { $updates['license_key'] = strtoupper(Str::uuid()->toString()); }
+            if (empty($lic->license_key)) { $updates['license_key'] = 'MCM-' . Str::upper(Str::random(8)); }
             if (empty($lic->expires_at_utc)) { $updates['expires_at_utc'] = $expires; }
             if (empty($lic->max_seats)) { $updates['max_seats'] = 1; }
             if (empty($lic->max_video)) { $updates['max_video'] = 2147483647; }
