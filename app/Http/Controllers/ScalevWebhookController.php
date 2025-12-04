@@ -369,8 +369,12 @@ class ScalevWebhookController extends Controller
             return;
         }
 
-        // Normalisasi nomor telepon sederhana
+        // Normalisasi nomor telepon: hapus spasi/simbol, ganti awalan 0 -> 62
         $target = preg_replace('/\s+/', '', $phone);
+        $target = preg_replace('/[^0-9+]/', '', $target);
+        if (preg_match('/^0\d+$/', $target)) {
+            $target = '62' . substr($target, 1);
+        }
         if (!$target) {
             Log::info('WA login not sent: phone empty');
             return;
@@ -386,18 +390,20 @@ class ScalevWebhookController extends Controller
 
         // Kirim via Whapify API (https://whapify.id/api/send/whatsapp)
         try {
-            $payload = [
-                'secret' => $cfg->ApiSecret,
-                'account' => $cfg->AccountUniqueId,
-                'recipient' => $target,
-                'type' => 'text',
-                'message' => $message,
+            Log::info('Attempting WA login via Whapify', ['phone' => $target, 'email' => $email]);
+
+            // Whapify membutuhkan multipart/form-data
+            $multipart = [
+                ['name' => 'secret', 'contents' => $cfg->ApiSecret],
+                ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
+                ['name' => 'recipient', 'contents' => $target],
+                ['name' => 'type', 'contents' => 'text'],
+                ['name' => 'message', 'contents' => $message],
             ];
 
-            // Whapify mendokumentasikan multipart/form-data; gunakan asForm saat tidak ada file.
             $resp = Http::timeout(20)
-                ->asForm()
-                ->post('https://whapify.id/api/send/whatsapp', $payload);
+                ->withOptions(['multipart' => $multipart])
+                ->post('https://whapify.id/api/send/whatsapp');
 
             if ($resp->ok()) {
                 Log::info('WA login sent via Whapify', ['phone' => $target, 'email' => $email]);
