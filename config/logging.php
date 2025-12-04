@@ -118,6 +118,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Custom channel for WhatsApp integration logs
+        'whatsapp' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/whatsapp.log'),
+            'level' => env('LOG_WHATSAPP_LEVEL', 'info'),
+            'replace_placeholders' => true,
+        ],
+
         'null' => [
             'driver' => 'monolog',
             'handler' => NullHandler::class,

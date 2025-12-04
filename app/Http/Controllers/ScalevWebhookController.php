@@ -328,10 +328,18 @@ class ScalevWebhookController extends Controller
         // Kirim informasi login via WhatsApp jika user baru dibuat dan nomor telepon tersedia
         try {
             if ($created && $user && !empty($user->phone) && !empty($plainPassword)) {
-                $this->sendWhatsappLogin($user->phone, $user->name, $user->email, $plainPassword);
+                $this->sendWhatsappLogin(
+                    $user->phone,
+                    $user->name,
+                    $user->email,
+                    $plainPassword,
+                    $lic,
+                    $orderRow,
+                    $statusText
+                );
             }
         } catch (\Throwable $e) {
-            Log::warning('Gagal mengirim WhatsApp info login', [
+            Log::channel('whatsapp')->warning('Gagal mengirim WhatsApp info login', [
                 'error' => $e->getMessage(),
                 'user_email' => $user ? $user->email : null,
             ]);
@@ -356,7 +364,7 @@ class ScalevWebhookController extends Controller
      * Menggunakan field: secret (ApiSecret), account (AccountUniqueId), recipient, type=text, message.
      * Jika konfigurasi tidak lengkap, hanya melakukan logging tanpa error fatal.
      */
-    private function sendWhatsappLogin(string $phone, string $name, string $email, string $plainPassword): void
+    private function sendWhatsappLogin(string $phone, string $name, string $email, string $plainPassword, $lic, $orderRow, string $statusText): void
     {
         // Ambil konfigurasi WhatsApp terbaru
         $cfg = DB::table('WhatsAppConfig')
@@ -365,7 +373,7 @@ class ScalevWebhookController extends Controller
             ->first();
 
         if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
-            Log::info('WA login not sent: missing ApiSecret/AccountUniqueId in WhatsAppConfig');
+            Log::channel('whatsapp')->info('WA login not sent: missing ApiSecret/AccountUniqueId in WhatsAppConfig');
             return;
         }
 
@@ -376,21 +384,45 @@ class ScalevWebhookController extends Controller
             $target = '62' . substr($target, 1);
         }
         if (!$target) {
-            Log::info('WA login not sent: phone empty');
+            Log::channel('whatsapp')->info('WA login not sent: phone empty');
             return;
         }
 
         $appUrl = rtrim(env('APP_URL', url('/')), '/');
         $loginUrl = $appUrl . '/login';
+        // Ambil detail license & pembelian
+        $licenseKey = $lic ? ($lic->license_key ?? '') : '';
+        $productName = $orderRow ? ($orderRow->ProductName ?? '') : ($lic ? ($lic->product_name ?? '') : '');
+        $tenorDays = $lic ? ((int)($lic->tenor_days ?? 0)) : 0;
+        $expiresAt = $lic && !empty($lic->expires_at_utc) ? Carbon::parse($lic->expires_at_utc)->setTimezone('Asia/Jakarta')->format('d-m-Y H:i') : null;
+        $price = $orderRow ? ($orderRow->VariantPrice ?? null) : null;
+        $installerVersion = $cfg ? ($cfg->InstallerVersion ?? null) : null;
+        $installerLink = $cfg ? ($cfg->InstallerLink ?? null) : null;
+        $groupLink = $cfg ? ($cfg->GroupLink ?? null) : null;
+
+        $priceText = $price !== null ? $this->formatRupiah((float)$price) : '-';
+        $statusLicense = $lic ? ($lic->status ?? 'InActive') : 'InActive';
+
+        // Susun pesan WhatsApp lengkap
         $message = "Halo {$name}, akun Anda sudah dibuat.\n\n".
             "Email: {$email}\n".
             "Password: {$plainPassword}\n".
             "Login: {$loginUrl}\n\n".
-            "Simpan password ini dan segera login.";
+            "Detail Pembelian:\n".
+            "- Produk: {$productName}\n".
+            "- License: {$licenseKey}\n".
+            "- Tenor: {$tenorDays} hari".
+            ($expiresAt ? " (berlaku sampai {$expiresAt} WIB)" : "") . "\n".
+            "- Harga: {$priceText}\n".
+            "- Status License: {$statusLicense}\n".
+            ($installerVersion ? "- Installer Version: {$installerVersion}\n" : "") .
+            ($installerLink ? "- Link Installer: {$installerLink}\n" : "") .
+            ($groupLink ? "- Link Group: {$groupLink}\n" : "") .
+            "\nSimpan password ini dan segera login.";
 
         // Kirim via Whapify API (https://whapify.id/api/send/whatsapp)
         try {
-            Log::info('Attempting WA login via Whapify', ['phone' => $target, 'email' => $email]);
+            Log::channel('whatsapp')->info('Attempting WA login via Whapify', ['phone' => $target, 'email' => $email]);
 
             // Whapify membutuhkan multipart/form-data
             $multipart = [
@@ -406,15 +438,21 @@ class ScalevWebhookController extends Controller
                 ->post('https://whapify.id/api/send/whatsapp');
 
             if ($resp->ok()) {
-                Log::info('WA login sent via Whapify', ['phone' => $target, 'email' => $email]);
+                Log::channel('whatsapp')->info('WA login sent via Whapify', ['phone' => $target, 'email' => $email]);
             } else {
-                Log::warning('WA login send failed via Whapify', [
+                Log::channel('whatsapp')->warning('WA login send failed via Whapify', [
                     'status' => $resp->status(),
                     'body' => $resp->body(),
                 ]);
             }
         } catch (\Throwable $e) {
-            Log::warning('WA login exception via Whapify', ['error' => $e->getMessage()]);
+            Log::channel('whatsapp')->warning('WA login exception via Whapify', ['error' => $e->getMessage()]);
         }
+    }
+
+    private function formatRupiah(float $amount): string
+    {
+        $formatted = number_format($amount, 0, ',', '.');
+        return 'Rp ' . $formatted;
     }
 }
