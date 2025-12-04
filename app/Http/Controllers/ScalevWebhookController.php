@@ -6,6 +6,8 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
 
@@ -18,12 +20,53 @@ class ScalevWebhookController extends Controller
     public function handle(Request $request)
     {
         // Optional signature verification (HMAC SHA256 of raw body with secret)
+        $rawBody = $request->getContent();
         $secret = env('SCALEV_WEBHOOK_SECRET');
+        $sigHeaders = [
+            'X-ScaleV-Signature', 'X-Signature', 'X-Webhook-Signature',
+            'X-Hub-Signature', 'X-Hub-Signature-256', 'ScaleV-Signature'
+        ];
+        $sigVal = null;
+        foreach ($sigHeaders as $h) {
+            $v = $request->header($h);
+            if ($v) { $sigVal = $v; break; }
+        }
+
         if (!empty($secret)) {
-            $signature = $request->header('X-ScaleV-Signature');
-            $computed = hash_hmac('sha256', $request->getContent(), $secret);
-            if (!$signature || !hash_equals($computed, $signature)) {
-                return response()->json(['ok' => false, 'error' => 'Invalid signature'], 401);
+            // Accept several signature formats: raw hex/base64 HMAC, or prefixed "sha256="
+            $hmacBin = hash_hmac('sha256', $rawBody, $secret, true);
+            $hmacHex = hash_hmac('sha256', $rawBody, $secret);
+            $hmacB64 = base64_encode($hmacBin);
+
+            $candidate = trim((string)$sigVal);
+            $candidateStripped = strtolower(str_replace([' ', '-', '\t'], '', $candidate));
+            $prefixed = strtolower($candidate);
+
+            $match = false;
+            if ($candidate && (
+                hash_equals($hmacHex, $candidateStripped) ||
+                hash_equals($hmacB64, $candidate) ||
+                (str_starts_with($prefixed, 'sha256=') && hash_equals($hmacHex, substr($prefixed, 7)))
+            )) {
+                $match = true;
+            }
+
+            // Also accept plain SHA256 of body for interoperability if provider uses digest, not HMAC
+            if (!$match) {
+                $shaHex = hash('sha256', $rawBody);
+                $shaBin = hash('sha256', $rawBody, true);
+                $shaB64 = base64_encode($shaBin);
+                if (
+                    hash_equals($shaHex, $candidateStripped) ||
+                    hash_equals($shaB64, $candidate) ||
+                    (str_starts_with($prefixed, 'sha256=') && hash_equals($shaHex, substr($prefixed, 7)))
+                ) {
+                    $match = true;
+                }
+            }
+
+            if (!$match) {
+                return response()->json(['ok' => false, 'error' => 'invalid_signature'], 401);
             }
         }
 
@@ -81,8 +124,49 @@ class ScalevWebhookController extends Controller
             $user->save();
         }
 
-        // Optionally, you can email the password or a password-set link here.
-        // Leaving out email sending to keep scope minimal.
+        // Upsert OrderData for visibility in /orders page
+        $orderId = $request->input('order_id')
+            ?? $request->input('OrderId')
+            ?? $request->input('orderId')
+            ?? ('ORD-'.Str::upper(bin2hex(random_bytes(4))));
+        $productName = $request->input('product_name')
+            ?? $request->input('ProductName')
+            ?? null;
+        $variantPrice = $request->input('variant_price')
+            ?? $request->input('VariantPrice')
+            ?? null;
+        $netRevenue = $request->input('net_revenue')
+            ?? $request->input('NetRevenue')
+            ?? null;
+        $statusText = $to === 'paid' ? 'Paid' : ($request->input('Status') ?? 'Not Paid');
+
+        $now = Carbon::now();
+        $exists = DB::table('OrderData')->where('OrderId', $orderId)->exists();
+        if (!$exists) {
+            DB::table('OrderData')->insert([
+                'OrderId' => $orderId,
+                'Email' => $email,
+                'Phone' => $phone,
+                'Name' => $name,
+                'ProductName' => $productName,
+                'VariantPrice' => $variantPrice,
+                'NetRevenue' => $netRevenue,
+                'Status' => $statusText,
+                'CreatedAt' => $now,
+                'UpdatedAt' => $now,
+            ]);
+        } else {
+            DB::table('OrderData')->where('OrderId', $orderId)->update([
+                'Email' => $email,
+                'Phone' => $phone,
+                'Name' => $name,
+                'ProductName' => $productName,
+                'VariantPrice' => $variantPrice,
+                'NetRevenue' => $netRevenue,
+                'Status' => $statusText,
+                'UpdatedAt' => $now,
+            ]);
+        }
 
         return response()->json([
             'ok' => true,
@@ -90,9 +174,9 @@ class ScalevWebhookController extends Controller
             'user_id' => $user->id,
             'email' => $user->email,
             'role' => $user->role,
+            'order_id' => $orderId,
             // Return temporary password only when newly created
             'temporary_password' => $created ? $plainPassword : null,
         ], $created ? 201 : 200);
     }
 }
-
