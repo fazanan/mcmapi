@@ -73,10 +73,26 @@ class ScalevWebhookController extends Controller
             }
         }
 
-        // Basic payload validation
-        $validator = Validator::make($request->all(), [
-            'status_from' => 'required|string',
+        // Canonicalize payload keys to be compatible with previous formats
+        $p = $request->all();
+        $canonical = [
+            'name'        => $p['name']        ?? $p['Name']        ?? $p['customer_name'] ?? $p['buyer_name'] ?? null,
+            'email'       => $p['email']       ?? $p['Email']       ?? $p['customer_email'] ?? null,
+            'phone'       => $p['phone']       ?? $p['Phone']       ?? $p['customer_phone'] ?? $p['whatsapp'] ?? $p['wa'] ?? null,
+            'status_from' => $p['status_from'] ?? $p['StatusFrom']  ?? $p['previous_status'] ?? $p['from_status'] ?? $p['before_status'] ?? $p['old_status'] ?? null,
+            'status_to'   => $p['status_to']   ?? $p['StatusTo']    ?? $p['status'] ?? $p['Status'] ?? $p['payment_status'] ?? $p['PaymentStatus'] ?? $p['to_status'] ?? $p['current_status'] ?? null,
+        ];
+
+        // If only status_to is provided and equals paid, assume transition from not_paid
+        if ((!$canonical['status_from'] || $canonical['status_from'] === '') && !empty($canonical['status_to'])) {
+            $stTo = strtolower((string)$canonical['status_to']);
+            if ($stTo === 'paid') { $canonical['status_from'] = 'not_paid'; }
+        }
+
+        // Validate canonical payload
+        $validator = Validator::make($canonical, [
             'status_to'   => 'required|string',
+            'status_from' => 'nullable|string',
             'name'        => 'required|string|max:255',
             'email'       => 'required|email',
             'phone'       => 'nullable|string|max:50',
@@ -86,8 +102,8 @@ class ScalevWebhookController extends Controller
             return response()->json(['ok' => false, 'errors' => $validator->errors()], 422);
         }
 
-        $from = strtolower($request->input('status_from'));
-        $to   = strtolower($request->input('status_to'));
+        $from = strtolower((string)$canonical['status_from']);
+        $to   = strtolower((string)$canonical['status_to']);
 
         // Accept various not-paid labels
         $notPaidLabels = ['not_paid', 'unpaid', 'pending'];
@@ -96,9 +112,9 @@ class ScalevWebhookController extends Controller
         }
 
         // Create or update user
-        $email = $request->input('email');
-        $name  = $request->input('name');
-        $phone = $request->input('phone');
+        $email = $canonical['email'];
+        $name  = $canonical['name'];
+        $phone = $canonical['phone'];
 
         $user = User::where('email', $email)->first();
         $created = false;
