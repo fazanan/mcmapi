@@ -9,6 +9,8 @@ use Illuminate\Support\Str;
 use App\Http\Controllers\VoiceOverController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ScalevWebhookController;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Http\RedirectResponse;
 
 // Helper verifikasi signature yang toleran format
 if (!function_exists('verifySignatureFlexible')) {
@@ -1061,3 +1063,87 @@ Route::get('/api/customerlicense/{license}/voice-config', function ($license) {
         'apikeys' => $items,
     ]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+// Debug: tulis log ke channel 'whatsapp' untuk memastikan file whatsapp.log dibuat
+Route::get('/debug/whatsapp-log', function () {
+    Log::channel('whatsapp')->info('Manual test log for WhatsApp channel', [
+        'ts' => now()->toISOString(),
+    ]);
+    return response()->json(['ok' => true, 'message' => 'whatsapp.log should have a new entry']);
+});
+
+// Halaman Test WhatsApp: form sederhana untuk kirim pesan via Whapify dan tampilkan hasil + tail log
+Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
+    $result = null;
+    $recipient = trim((string)$request->input('recipient'));
+    $message = (string)($request->input('message') ?? 'Halo, ini test kiriman WhatsApp dari halaman admin.');
+    $overrideSecret = $request->input('secret');
+    $overrideAccount = $request->input('account');
+
+    // Ambil config WhatsApp terbaru
+    $cfg = DB::table('WhatsAppConfig')->orderByDesc('UpdatedAt')->orderByDesc('Id')->first();
+    $secret = $overrideSecret ?: ($cfg->ApiSecret ?? null);
+    $account = $overrideAccount ?: ($cfg->AccountUniqueId ?? null);
+
+    $statusCfg = [
+        'hasSecret' => !empty($secret),
+        'hasAccount' => !empty($account),
+    ];
+
+    if ($request->isMethod('post')) {
+        try {
+            // Normalisasi nomor
+            $target = preg_replace('/\s+/', '', $recipient);
+            $target = preg_replace('/[^0-9+]/', '', $target);
+            if (preg_match('/^0\d+$/', $target)) { $target = '62'.substr($target,1); }
+
+            if (!$secret || !$account) {
+                $result = ['ok'=>false,'status'=>0,'body'=>'Secret atau Account tidak terisi (cek WhatsAppConfig atau isi override).'];
+            } elseif (!$target) {
+                $result = ['ok'=>false,'status'=>0,'body'=>'Recipient kosong atau tidak valid.'];
+            } else {
+                Log::channel('whatsapp')->info('Test WA page: Attempting send', ['recipient'=>$target]);
+                $multipart = [
+                    ['name'=>'secret','contents'=>$secret],
+                    ['name'=>'account','contents'=>$account],
+                    ['name'=>'recipient','contents'=>$target],
+                    ['name'=>'type','contents'=>'text'],
+                    ['name'=>'message','contents'=>$message],
+                ];
+                $resp = \Illuminate\Support\Facades\Http::timeout(20)
+                    ->withOptions(['multipart' => $multipart])
+                    ->post('https://whapify.id/api/send/whatsapp');
+
+                if ($resp->ok()) {
+                    Log::channel('whatsapp')->info('Test WA page: Sent', ['recipient'=>$target]);
+                } else {
+                    Log::channel('whatsapp')->warning('Test WA page: Failed', ['status'=>$resp->status(),'body'=>$resp->body()]);
+                }
+                $result = ['ok'=>$resp->ok(),'status'=>$resp->status(),'body'=>$resp->body()];
+            }
+        } catch (\Throwable $e) {
+            Log::channel('whatsapp')->warning('Test WA page: Exception', ['error'=>$e->getMessage()]);
+            $result = ['ok'=>false,'status'=>0,'body'=>'Exception: '.$e->getMessage()];
+        }
+    }
+
+    // Ambil tail log whatsapp untuk ditampilkan di halaman
+    $logTail = [];
+    try {
+        $path = storage_path('logs/whatsapp.log');
+        if (file_exists($path)) {
+            $lines = @file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            if ($lines !== false) { $logTail = array_slice($lines, -100); }
+        }
+    } catch (\Throwable $e) { /* abaikan */ }
+
+    return view('testwhatsapp.index', [
+        'result' => $result,
+        'recipient' => $recipient,
+        'message' => $message,
+        'statusCfg' => $statusCfg,
+        'overrideSecret' => $overrideSecret,
+        'overrideAccount' => $overrideAccount,
+        'logTail' => $logTail,
+    ]);
+})->middleware(['auth','role:admin']);
