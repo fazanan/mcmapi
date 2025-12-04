@@ -282,6 +282,35 @@ class ScalevWebhookController extends Controller
             $lic->save();
         }
 
+        // Pastikan user dibuat/setelah license di-generate: ambil dari OrderData
+        $targetEmail = $orderEmail ?? $email;
+        $targetPhone = $orderPhone ?? $phone;
+        $targetName = ($orderName ?: $name) ?: null;
+        if ($targetEmail) {
+            $existing = User::where('email', $targetEmail)->first();
+            if (!$existing) {
+                // Password acak 8 digit angka
+                $plainPassword = str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
+                $safeName = $targetName ?: (strstr($targetEmail, '@', true) ?: 'Member');
+                $user = new User();
+                $user->name = $safeName;
+                $user->email = $targetEmail;
+                $user->phone = $targetPhone;
+                $user->role = 'member';
+                $user->password = Hash::make($plainPassword);
+                $user->save();
+                $created = true; // tandai bahwa user baru dibuat
+            } else {
+                // Update profil agar name tidak null dan role member
+                $safeName = $targetName ?: ($existing->name ?: (strstr($targetEmail, '@', true) ?: 'Member'));
+                $existing->name = $safeName;
+                $existing->phone = $targetPhone ?? $existing->phone;
+                $existing->role = 'member';
+                $existing->save();
+                $user = $existing;
+            }
+        }
+
         // If user is missing, still respond OK with license info
         if (!$user) {
             return response()->json([
