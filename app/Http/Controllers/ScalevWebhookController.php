@@ -58,44 +58,45 @@ class ScalevWebhookController extends Controller
         $from = $statusFrom ?: 'unpaid';
         $to   = $statusTo ?: '';
 
-        // Accept various not-paid labels
+        // Accept various not-paid labels and determine if we have a not-paid -> paid transition
         $notPaidLabels = ['not_paid', 'unpaid', 'pending'];
-        if (!in_array($from, $notPaidLabels, true) || $to !== 'paid') {
-            return response()->json(['ok' => true, 'result' => 'ignored', 'reason' => 'no-paid-transition']);
-        }
+        $isPaidTransition = in_array($from, $notPaidLabels, true) && $to === 'paid';
 
-        // Create or update user
         // Extract customer info from destination_address or fallback
         $dest = $data['destination_address'] ?? [];
         $email = $dest['email'] ?? $data['customer_email'] ?? $data['email'] ?? null;
         $name  = $dest['name']  ?? $data['customer_name']  ?? $data['name']  ?? null;
         $phone = $dest['phone'] ?? $data['customer_phone'] ?? $data['phone'] ?? null;
 
-        $user = User::where('email', $email)->first();
+        $user = null;
         $created = false;
         $plainPassword = null;
 
-        if (!$user) {
-            $created = true;
-            $plainPassword = Str::random(12);
-            $user = new User();
-            $user->name = $name;
-            $user->email = $email;
-            $user->phone = $phone;
-            $user->role = 'member';
-            $user->password = Hash::make($plainPassword);
-            $user->save();
+        if ($isPaidTransition) {
+            // Create or update user only when transitioning to paid
+            $user = User::where('email', $email)->first();
+            if (!$user) {
+                $created = true;
+                $plainPassword = Str::random(12);
+                $user = new User();
+                $user->name = $name;
+                $user->email = $email;
+                $user->phone = $phone;
+                $user->role = 'member';
+                $user->password = Hash::make($plainPassword);
+                $user->save();
 
-            Log::info('ScaleV webhook created member', [
-                'email' => $email,
-                // Do NOT log plaintext password in production. Shown here for handoff purposes only.
-            ]);
-        } else {
-            // Ensure role and profile data are up to date
-            $user->name = $name;
-            $user->phone = $phone;
-            $user->role = 'member';
-            $user->save();
+                Log::info('ScaleV webhook created member', [
+                    'email' => $email,
+                    // Do NOT log plaintext password in production. Shown here for handoff purposes only.
+                ]);
+            } else {
+                // Ensure role and profile data are up to date
+                $user->name = $name;
+                $user->phone = $phone;
+                $user->role = 'member';
+                $user->save();
+            }
         }
 
         // Upsert OrderData for visibility in /orders page
@@ -148,6 +149,17 @@ class ScalevWebhookController extends Controller
             ]);
         }
 
+        if (!$isPaidTransition) {
+            // For non-paid events, still log/save order row for visibility
+            return response()->json([
+                'ok' => true,
+                'result' => 'logged',
+                'order_id' => $orderId,
+                'status' => $statusText,
+            ], 200);
+        }
+
+        // For paid transition, return user-centric payload
         return response()->json([
             'ok' => true,
             'result' => $created ? 'created' : 'updated',
