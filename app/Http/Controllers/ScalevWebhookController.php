@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\CustomerLicense;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -79,7 +80,7 @@ class ScalevWebhookController extends Controller
 
         if ($isPaidTransition) {
             // Create or update user only when transitioning to paid
-            if ($email) {
+            if ($email !== null && $email !== '') {
                 $user = User::where('email', $email)->first();
                 if (!$user) {
                     $created = true;
@@ -90,7 +91,7 @@ class ScalevWebhookController extends Controller
                         $local = strstr($email, '@', true);
                         $name = $local ?: 'Member';
                     }
-                    $user->name = $name;
+                    $user->name = $name ?: (strstr($email, '@', true) ?: 'Member');
                     $user->email = $email;
                     $user->phone = $phone;
                     $user->role = 'member';
@@ -107,7 +108,7 @@ class ScalevWebhookController extends Controller
                         $local = strstr($email, '@', true);
                         $name = $local ?: ($user->name ?: 'Member');
                     }
-                    $user->name = $name;
+                    $user->name = $name ?: ($user->name ?: (strstr($email, '@', true) ?: 'Member'));
                     $user->phone = $phone;
                     $user->role = 'member';
                     $user->save();
@@ -180,7 +181,85 @@ class ScalevWebhookController extends Controller
             ], 200);
         }
 
-        // For paid transition, return user-centric payload if user exists, else logged_no_user
+        // Paid transition: generate or update license tied to this order
+        // 1) Parse edition dari nama produk: ambil kata di antara tanda '-' pertama dan kedua
+        $edition = null;
+        $rawProduct = (string)($productName ?? '');
+        if (preg_match('/\s-\s*([^\-\)]+?)\s-\s*/u', $rawProduct, $m)) {
+            $edition = trim($m[1]);
+        }
+        // Fallback bila parsing gagal: gunakan heuristik lama
+        if (!$edition) {
+            $pnameLc = strtolower($rawProduct);
+            if (str_contains($pnameLc, 'pro')) { $edition = 'Pro'; }
+            elseif (str_contains($pnameLc, 'basic') || str_contains($pnameLc, 'lite')) { $edition = 'Basic'; }
+            else { $edition = (string)($data['edition'] ?? 'Basic'); }
+        }
+
+        // 2) Hitung tenor hari dari pola "Akses X bulan" => X*30 hari
+        $validityDays = 180;
+        if (preg_match('/Akses\s+(\d+)\s+bulan/i', $rawProduct, $tm)) {
+            $months = (int)$tm[1];
+            if ($months > 0) { $validityDays = $months * 30; }
+        }
+        $expires = now('UTC')->addDays((int)$validityDays);
+        $featuresInput = $data['features'] ?? null;
+        $featuresJson = is_array($featuresInput) ? json_encode($featuresInput) : ($featuresInput ?: json_encode(['Batch','TextOverlay']));
+
+        $lic = CustomerLicense::query()->where('order_id', $orderId)->first();
+        if (!$lic) {
+            $newKey = strtoupper(Str::uuid()->toString());
+            // Fallback owner if name/email missing
+            $ownerName = $name ?: ($email ? (strstr($email, '@', true) ?: 'Member') : 'Member');
+            $lic = CustomerLicense::create([
+                'order_id' => $orderId,
+                'license_key' => $newKey,
+                'owner' => $ownerName,
+                'email' => $email,
+                'phone' => $phone,
+                'edition' => $edition,
+                'payment_status' => 'paid',
+                'product_name' => $productName,
+                'tenor_days' => $validityDays,
+                'expires_at_utc' => $expires,
+                'max_seats' => 1,
+                'features' => $featuresJson,
+                'max_video' => 2147483647,
+                'vo_seconds_remaining' => 100000,
+                'status' => 'InActive',
+            ]);
+            DB::table('license_actions')->insert([
+                'license_key' => $lic->license_key,
+                'order_id' => $lic->order_id,
+                'email' => $email,
+                'action' => 'Generate',
+                'result' => 'Success',
+                'message' => 'License '.$edition.' generated for paid order.',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } else {
+            $updates = [
+                'owner' => $name ?: ($lic->owner ?: ($email ? (strstr($email, '@', true) ?: 'Member') : 'Member')),
+                'email' => $email ?? $lic->email,
+                'phone' => $phone ?? $lic->phone,
+                'edition' => $lic->edition ?: $edition,
+                'payment_status' => 'paid',
+                'product_name' => $productName ?? $lic->product_name,
+                'tenor_days' => $lic->tenor_days ?: $validityDays,
+                'features' => $lic->features ?: $featuresJson,
+                'status' => $lic->status ?: 'InActive',
+            ];
+            // Only set license key and expires if currently empty
+            if (empty($lic->license_key)) { $updates['license_key'] = strtoupper(Str::uuid()->toString()); }
+            if (empty($lic->expires_at_utc)) { $updates['expires_at_utc'] = $expires; }
+            if (empty($lic->max_seats)) { $updates['max_seats'] = 1; }
+            if (empty($lic->max_video)) { $updates['max_video'] = 2147483647; }
+            $lic->fill($updates);
+            $lic->save();
+        }
+
+        // If user is missing, still respond OK with license info
         if (!$user) {
             return response()->json([
                 'ok' => true,
@@ -188,6 +267,8 @@ class ScalevWebhookController extends Controller
                 'reason' => 'missing_email',
                 'order_id' => $orderId,
                 'status' => $statusText,
+                'license_key' => $lic->license_key,
+                'edition' => $lic->edition,
             ], 200);
         }
 
@@ -198,6 +279,8 @@ class ScalevWebhookController extends Controller
             'email' => $user->email,
             'role' => $user->role,
             'order_id' => $orderId,
+            'license_key' => $lic->license_key,
+            'edition' => $lic->edition,
             // Return temporary password only when newly created
             'temporary_password' => $created ? $plainPassword : null,
         ], $created ? 201 : 200);
