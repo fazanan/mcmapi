@@ -159,16 +159,26 @@ class ScalevWebhookController extends Controller
                 'UpdatedAt' => $now,
             ]);
         } else {
-            DB::table('OrderData')->where('OrderId', $orderId)->update([
-                'Email' => $email,
-                'Phone' => $phone,
-                'Name' => $name,
-                'ProductName' => $productName,
-                'VariantPrice' => $variantPrice,
-                'NetRevenue' => $netRevenue,
-                'Status' => $statusText,
-                'UpdatedAt' => $now,
-            ]);
+            // Saat status sudah menjadi paid, jangan kosongkan kolom lain: hanya update Status dan UpdatedAt
+            if ($to === 'paid') {
+                DB::table('OrderData')->where('OrderId', $orderId)->update([
+                    'Status' => $statusText,
+                    'UpdatedAt' => $now,
+                ]);
+            } else {
+                // Untuk event non-paid, update hanya kolom yang ada nilainya agar tidak menimpa dengan null
+                $update = [
+                    'Status' => $statusText,
+                    'UpdatedAt' => $now,
+                ];
+                if ($email !== null) { $update['Email'] = $email; }
+                if ($phone !== null) { $update['Phone'] = $phone; }
+                if ($name !== null) { $update['Name'] = $name; }
+                if ($productName !== null) { $update['ProductName'] = $productName; }
+                if ($variantPrice !== null) { $update['VariantPrice'] = $variantPrice; }
+                if ($netRevenue !== null) { $update['NetRevenue'] = $netRevenue; }
+                DB::table('OrderData')->where('OrderId', $orderId)->update($update);
+            }
         }
 
         if (!$isPaidTransition) {
