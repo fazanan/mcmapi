@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\CustomerLicense;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
@@ -324,6 +325,18 @@ class ScalevWebhookController extends Controller
             ], 200);
         }
 
+        // Kirim informasi login via WhatsApp jika user baru dibuat dan nomor telepon tersedia
+        try {
+            if ($created && $user && !empty($user->phone) && !empty($plainPassword)) {
+                $this->sendWhatsappLogin($user->phone, $user->name, $user->email, $plainPassword);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Gagal mengirim WhatsApp info login', [
+                'error' => $e->getMessage(),
+                'user_email' => $user ? $user->email : null,
+            ]);
+        }
+
         return response()->json([
             'ok' => true,
             'result' => $created ? 'created' : 'updated',
@@ -336,5 +349,66 @@ class ScalevWebhookController extends Controller
             // Return temporary password only when newly created
             'temporary_password' => $created ? $plainPassword : null,
         ], $created ? 201 : 200);
+    }
+
+    /**
+     * Mengirim informasi login ke nomor WhatsApp user via Whapify.
+     * Menggunakan field: secret (ApiSecret), account (AccountUniqueId), recipient, type=text, message.
+     * Jika konfigurasi tidak lengkap, hanya melakukan logging tanpa error fatal.
+     */
+    private function sendWhatsappLogin(string $phone, string $name, string $email, string $plainPassword): void
+    {
+        // Ambil konfigurasi WhatsApp terbaru
+        $cfg = DB::table('WhatsAppConfig')
+            ->orderByDesc('UpdatedAt')
+            ->orderByDesc('Id')
+            ->first();
+
+        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+            Log::info('WA login not sent: missing ApiSecret/AccountUniqueId in WhatsAppConfig');
+            return;
+        }
+
+        // Normalisasi nomor telepon sederhana
+        $target = preg_replace('/\s+/', '', $phone);
+        if (!$target) {
+            Log::info('WA login not sent: phone empty');
+            return;
+        }
+
+        $appUrl = rtrim(env('APP_URL', url('/')), '/');
+        $loginUrl = $appUrl . '/login';
+        $message = "Halo {$name}, akun Anda sudah dibuat.\n\n".
+            "Email: {$email}\n".
+            "Password: {$plainPassword}\n".
+            "Login: {$loginUrl}\n\n".
+            "Simpan password ini dan segera login.";
+
+        // Kirim via Whapify API (https://whapify.id/api/send/whatsapp)
+        try {
+            $payload = [
+                'secret' => $cfg->ApiSecret,
+                'account' => $cfg->AccountUniqueId,
+                'recipient' => $target,
+                'type' => 'text',
+                'message' => $message,
+            ];
+
+            // Whapify mendokumentasikan multipart/form-data; gunakan asForm saat tidak ada file.
+            $resp = Http::timeout(20)
+                ->asForm()
+                ->post('https://whapify.id/api/send/whatsapp', $payload);
+
+            if ($resp->ok()) {
+                Log::info('WA login sent via Whapify', ['phone' => $target, 'email' => $email]);
+            } else {
+                Log::warning('WA login send failed via Whapify', [
+                    'status' => $resp->status(),
+                    'body' => $resp->body(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('WA login exception via Whapify', ['error' => $e->getMessage()]);
+        }
     }
 }
