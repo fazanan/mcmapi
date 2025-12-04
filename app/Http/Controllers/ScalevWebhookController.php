@@ -20,19 +20,22 @@ class ScalevWebhookController extends Controller
     public function handle(Request $request)
     {
         // Optional signature verification (HMAC SHA256 of raw body with secret)
+        // Keep behavior as before: signature verification disabled by default.
+        // To enforce signature, set SCALEV_WEBHOOK_ENFORCE=true in .env.
         $rawBody = $request->getContent();
         $secret = env('SCALEV_WEBHOOK_SECRET');
-        $sigHeaders = [
-            'X-ScaleV-Signature', 'X-Signature', 'X-Webhook-Signature',
-            'X-Hub-Signature', 'X-Hub-Signature-256', 'ScaleV-Signature'
-        ];
-        $sigVal = null;
-        foreach ($sigHeaders as $h) {
-            $v = $request->header($h);
-            if ($v) { $sigVal = $v; break; }
-        }
+        $enforce = filter_var(env('SCALEV_WEBHOOK_ENFORCE', false), FILTER_VALIDATE_BOOLEAN);
+        if ($enforce && !empty($secret)) {
+            $sigHeaders = [
+                'X-ScaleV-Signature', 'X-Signature', 'X-Webhook-Signature',
+                'X-Hub-Signature', 'X-Hub-Signature-256', 'ScaleV-Signature'
+            ];
+            $sigVal = null;
+            foreach ($sigHeaders as $h) {
+                $v = $request->header($h);
+                if ($v) { $sigVal = $v; break; }
+            }
 
-        if (!empty($secret)) {
             // Accept several signature formats: raw hex/base64 HMAC, or prefixed "sha256="
             $hmacBin = hash_hmac('sha256', $rawBody, $secret, true);
             $hmacHex = hash_hmac('sha256', $rawBody, $secret);
