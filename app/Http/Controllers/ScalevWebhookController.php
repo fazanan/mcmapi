@@ -19,91 +19,43 @@ class ScalevWebhookController extends Controller
      */
     public function handle(Request $request)
     {
-        // Optional signature verification (HMAC SHA256 of raw body with secret)
-        // Keep behavior as before: signature verification disabled by default.
-        // To enforce signature, set SCALEV_WEBHOOK_ENFORCE=true in .env.
+        // Follow ScaleV docs: verify X-Scalev-Hmac-Sha256 (base64 HMAC-SHA256 of raw JSON)
         $rawBody = $request->getContent();
         $secret = env('SCALEV_WEBHOOK_SECRET');
-        $enforce = filter_var(env('SCALEV_WEBHOOK_ENFORCE', false), FILTER_VALIDATE_BOOLEAN);
+        $enforce = filter_var(env('SCALEV_WEBHOOK_ENFORCE', true), FILTER_VALIDATE_BOOLEAN);
         if ($enforce && !empty($secret)) {
-            $sigHeaders = [
-                'X-ScaleV-Signature', 'X-Signature', 'X-Webhook-Signature',
-                'X-Hub-Signature', 'X-Hub-Signature-256', 'ScaleV-Signature'
-            ];
-            $sigVal = null;
-            foreach ($sigHeaders as $h) {
-                $v = $request->header($h);
-                if ($v) { $sigVal = $v; break; }
+            $sigVal = $request->header('X-Scalev-Hmac-Sha256')
+                ?? $request->header('X-ScaleV-Hmac-Sha256'); // tolerate case variation
+            if (!$sigVal) {
+                return response()->json(['ok' => false, 'error' => 'missing_signature'], 401);
             }
-
-            // Accept several signature formats: raw hex/base64 HMAC, or prefixed "sha256="
-            $hmacBin = hash_hmac('sha256', $rawBody, $secret, true);
-            $hmacHex = hash_hmac('sha256', $rawBody, $secret);
-            $hmacB64 = base64_encode($hmacBin);
-
-            $candidate = trim((string)$sigVal);
-            $candidateStripped = strtolower(str_replace([' ', '-', '\t'], '', $candidate));
-            $prefixed = strtolower($candidate);
-
-            $match = false;
-            if ($candidate && (
-                hash_equals($hmacHex, $candidateStripped) ||
-                hash_equals($hmacB64, $candidate) ||
-                (str_starts_with($prefixed, 'sha256=') && hash_equals($hmacHex, substr($prefixed, 7)))
-            )) {
-                $match = true;
-            }
-
-            // Also accept plain SHA256 of body for interoperability if provider uses digest, not HMAC
-            if (!$match) {
-                $shaHex = hash('sha256', $rawBody);
-                $shaBin = hash('sha256', $rawBody, true);
-                $shaB64 = base64_encode($shaBin);
-                if (
-                    hash_equals($shaHex, $candidateStripped) ||
-                    hash_equals($shaB64, $candidate) ||
-                    (str_starts_with($prefixed, 'sha256=') && hash_equals($shaHex, substr($prefixed, 7)))
-                ) {
-                    $match = true;
-                }
-            }
-
-            if (!$match) {
+            $calc = base64_encode(hash_hmac('sha256', $rawBody, $secret, true));
+            if (!hash_equals($calc, trim($sigVal))) {
                 return response()->json(['ok' => false, 'error' => 'invalid_signature'], 401);
             }
         }
 
-        // Canonicalize payload keys to be compatible with previous formats
-        $p = $request->all();
-        $canonical = [
-            'name'        => $p['name']        ?? $p['Name']        ?? $p['customer_name'] ?? $p['buyer_name'] ?? null,
-            'email'       => $p['email']       ?? $p['Email']       ?? $p['customer_email'] ?? null,
-            'phone'       => $p['phone']       ?? $p['Phone']       ?? $p['customer_phone'] ?? $p['whatsapp'] ?? $p['wa'] ?? null,
-            'status_from' => $p['status_from'] ?? $p['StatusFrom']  ?? $p['previous_status'] ?? $p['from_status'] ?? $p['before_status'] ?? $p['old_status'] ?? null,
-            'status_to'   => $p['status_to']   ?? $p['StatusTo']    ?? $p['status'] ?? $p['Status'] ?? $p['payment_status'] ?? $p['PaymentStatus'] ?? $p['to_status'] ?? $p['current_status'] ?? null,
-        ];
+        // Parse body according to ScaleV: { event, timestamp, data: {...} }
+        $payload = json_decode($rawBody, true);
+        if (!is_array($payload)) {
+            return response()->json(['ok' => false, 'error' => 'invalid_json'], 400);
+        }
+        $event = $payload['event'] ?? null;
+        $data = $payload['data'] ?? $payload; // tolerate direct data body
+        if (!is_array($data)) { $data = []; }
 
-        // If only status_to is provided and equals paid, assume transition from not_paid
-        if ((!$canonical['status_from'] || $canonical['status_from'] === '') && !empty($canonical['status_to'])) {
-            $stTo = strtolower((string)$canonical['status_to']);
-            if ($stTo === 'paid') { $canonical['status_from'] = 'not_paid'; }
+        // Extract payment status transition
+        $statusTo = strtolower((string)($data['payment_status'] ?? $data['status'] ?? ''));
+        $statusFrom = null;
+        if (!empty($data['payment_status_history']) && is_array($data['payment_status_history'])) {
+            $hist = $data['payment_status_history'];
+            if (count($hist) >= 1) { $statusFrom = strtolower((string)($hist[0]['status'] ?? '')); }
+        } else {
+            $statusFrom = strtolower((string)($data['unpaid_time'] ? 'unpaid' : ''));
         }
 
-        // Validate canonical payload
-        $validator = Validator::make($canonical, [
-            'status_to'   => 'required|string',
-            'status_from' => 'nullable|string',
-            'name'        => 'required|string|max:255',
-            'email'       => 'required|email',
-            'phone'       => 'nullable|string|max:50',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['ok' => false, 'errors' => $validator->errors()], 422);
-        }
-
-        $from = strtolower((string)$canonical['status_from']);
-        $to   = strtolower((string)$canonical['status_to']);
+        $from = $statusFrom ?: 'unpaid';
+        $to   = $statusTo ?: '';
 
         // Accept various not-paid labels
         $notPaidLabels = ['not_paid', 'unpaid', 'pending'];
@@ -112,9 +64,11 @@ class ScalevWebhookController extends Controller
         }
 
         // Create or update user
-        $email = $canonical['email'];
-        $name  = $canonical['name'];
-        $phone = $canonical['phone'];
+        // Extract customer info from destination_address or fallback
+        $dest = $data['destination_address'] ?? [];
+        $email = $dest['email'] ?? $data['customer_email'] ?? $data['email'] ?? null;
+        $name  = $dest['name']  ?? $data['customer_name']  ?? $data['name']  ?? null;
+        $phone = $dest['phone'] ?? $data['customer_phone'] ?? $data['phone'] ?? null;
 
         $user = User::where('email', $email)->first();
         $created = false;
@@ -144,19 +98,25 @@ class ScalevWebhookController extends Controller
         }
 
         // Upsert OrderData for visibility in /orders page
-        $orderId = $request->input('order_id')
+        $orderId = $data['order_id']
+            ?? $request->input('order_id')
             ?? $request->input('OrderId')
             ?? $request->input('orderId')
             ?? ('ORD-'.Str::upper(bin2hex(random_bytes(4))));
-        $productName = $request->input('product_name')
-            ?? $request->input('ProductName')
-            ?? null;
-        $variantPrice = $request->input('variant_price')
-            ?? $request->input('VariantPrice')
-            ?? null;
-        $netRevenue = $request->input('net_revenue')
-            ?? $request->input('NetRevenue')
-            ?? null;
+        // Product/name & price from final_variants/orderlines if present
+        $productName = null;
+        $variantPrice = null;
+        if (!empty($data['final_variants']) && is_array($data['final_variants'])) {
+            $keys = array_keys($data['final_variants']);
+            if (!empty($keys)) { $productName = $keys[0]; }
+        }
+        if (!$productName && !empty($data['orderlines']) && is_array($data['orderlines'])) {
+            $first = $data['orderlines'][0] ?? [];
+            $productName = $first['product_name'] ?? $productName;
+            $variantPrice = $first['variant_price'] ?? $variantPrice;
+        }
+        $variantPrice = $variantPrice ?? ($data['product_price'] ?? null);
+        $netRevenue = $data['net_revenue'] ?? null;
         $statusText = $to === 'paid' ? 'Paid' : ($request->input('Status') ?? 'Not Paid');
 
         $now = Carbon::now();
