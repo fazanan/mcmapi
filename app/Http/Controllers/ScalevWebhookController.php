@@ -51,7 +51,8 @@ class ScalevWebhookController extends Controller
             $hist = $data['payment_status_history'];
             if (count($hist) >= 1) { $statusFrom = strtolower((string)($hist[0]['status'] ?? '')); }
         } else {
-            $statusFrom = strtolower((string)($data['unpaid_time'] ? 'unpaid' : ''));
+            // Avoid undefined array key notice when 'unpaid_time' is absent
+            $statusFrom = (isset($data['unpaid_time']) && !empty($data['unpaid_time'])) ? 'unpaid' : '';
         }
 
         $from = $statusFrom ?: 'unpaid';
