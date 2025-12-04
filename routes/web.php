@@ -1103,23 +1103,42 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
                 $result = ['ok'=>false,'status'=>0,'body'=>'Recipient kosong atau tidak valid.'];
             } else {
                 Log::channel('whatsapp')->info('Test WA page: Attempting send', ['recipient'=>$target]);
+                // Beberapa integrasi Whapify menerima 'account' dan ada yang meminta 'accountUniqueId'.
+                // Demikian pula 'message' vs 'text'. Untuk kompatibilitas, kirim keduanya.
                 $multipart = [
                     ['name'=>'secret','contents'=>$secret],
                     ['name'=>'account','contents'=>$account],
+                    ['name'=>'accountUniqueId','contents'=>$account],
                     ['name'=>'recipient','contents'=>$target],
                     ['name'=>'type','contents'=>'text'],
                     ['name'=>'message','contents'=>$message],
+                    ['name'=>'text','contents'=>$message],
                 ];
                 $resp = \Illuminate\Support\Facades\Http::timeout(20)
                     ->withOptions(['multipart' => $multipart])
                     ->post('https://whapify.id/api/send/whatsapp');
 
-                if ($resp->ok()) {
-                    Log::channel('whatsapp')->info('Test WA page: Sent', ['recipient'=>$target]);
-                } else {
-                    Log::channel('whatsapp')->warning('Test WA page: Failed', ['status'=>$resp->status(),'body'=>$resp->body()]);
+                // Terkadang API mengembalikan HTTP 200 tetapi body JSON menyatakan gagal (status!=200/data=false).
+                $bodyText = $resp->body();
+                $json = null;
+                try { $json = json_decode($bodyText, true, 512, JSON_THROW_ON_ERROR); } catch (\Throwable $e) { $json = null; }
+                $logicalOk = $resp->ok();
+                $logicalStatus = $resp->status();
+                if (is_array($json)) {
+                    if (isset($json['status']) && is_numeric($json['status'])) { $logicalStatus = (int)$json['status']; }
+                    if (array_key_exists('data', $json)) { $logicalOk = $logicalOk && (bool)$json['data']; }
                 }
-                $result = ['ok'=>$resp->ok(),'status'=>$resp->status(),'body'=>$resp->body()];
+
+                if ($logicalOk && $logicalStatus === 200) {
+                    Log::channel('whatsapp')->info('Test WA page: Sent', ['recipient'=>$target, 'http'=>$resp->status(), 'json_status'=>$logicalStatus]);
+                } else {
+                    Log::channel('whatsapp')->warning('Test WA page: Failed', [
+                        'http'=>$resp->status(),
+                        'json_status'=>$is_array = is_array($json) ? ($json['status'] ?? null) : null,
+                        'body'=>$bodyText,
+                    ]);
+                }
+                $result = ['ok'=>$logicalOk,'status'=>$logicalStatus,'body'=>$bodyText];
             }
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->warning('Test WA page: Exception', ['error'=>$e->getMessage()]);
