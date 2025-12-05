@@ -402,7 +402,7 @@ class ScalevWebhookController extends Controller
             'edition' => $lic->edition,
             // Return temporary password only when newly created
             'temporary_password' => $created ? $plainPassword : null,
-        ], $created ? 201 : 200);
+        ], 200);
     }
 
     /**
@@ -612,11 +612,37 @@ class ScalevWebhookController extends Controller
             return;
         }
 
+        // Logging awal untuk membantu diagnosa
+        Log::channel('whatsapp')->info('WA payment_status_changed: initial input', [
+            'order_id' => $orderId,
+            'phone_payload' => $phone,
+            'email' => $email,
+        ]);
+
         // Jika phone kosong, coba ambil dari tabel OrderData berdasarkan OrderId
         if (empty($phone)) {
             $row = DB::table('OrderData')->where('OrderId', $orderId)->first();
             if ($row && !empty($row->Phone)) {
                 $phone = (string)$row->Phone;
+                Log::channel('whatsapp')->info('WA payment_status_changed: phone from OrderData', ['phone' => $phone]);
+            }
+        }
+
+        // Fallback: coba ambil dari User berdasarkan email
+        if (empty($phone) && !empty($email)) {
+            $u = \App\Models\User::where('email', $email)->first();
+            if ($u && !empty($u->phone)) {
+                $phone = (string)$u->phone;
+                Log::channel('whatsapp')->info('WA payment_status_changed: phone from User', ['phone' => $phone]);
+            }
+        }
+
+        // Fallback: coba ambil dari CustomerLicense berdasarkan license key
+        if (empty($phone) && !empty($licenseKey)) {
+            $licRow = \App\Models\CustomerLicense::where('license_key', $licenseKey)->first();
+            if ($licRow && !empty($licRow->phone)) {
+                $phone = (string)$licRow->phone;
+                Log::channel('whatsapp')->info('WA payment_status_changed: phone from License', ['phone' => $phone]);
             }
         }
 
@@ -657,20 +683,25 @@ class ScalevWebhookController extends Controller
 
             $multipart = [
                 ['name' => 'secret', 'contents' => $cfg->ApiSecret],
+                // Kirim kedua field untuk kompatibilitas variasi Whapify
                 ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
+                ['name' => 'accountUniqueId', 'contents' => $cfg->AccountUniqueId],
                 ['name' => 'recipient', 'contents' => $target],
                 ['name' => 'type', 'contents' => 'text'],
                 ['name' => 'message', 'contents' => $message],
+                ['name' => 'text', 'contents' => $message],
             ];
 
             $resp = Http::timeout(20)
                 ->withOptions(['multipart' => $multipart])
                 ->post('https://whapify.id/api/send/whatsapp');
 
-            if ($resp->ok()) {
+            // Treat any 2xx as success (Whapify may return 201 Created)
+            if ($resp->successful()) {
                 Log::channel('whatsapp')->info('WA payment_status_changed sent via Whapify', [
                     'phone' => $target,
                     'license' => $licenseKey,
+                    'http' => $resp->status(),
                 ]);
             } else {
                 Log::channel('whatsapp')->warning('WA payment_status_changed send failed via Whapify', [
