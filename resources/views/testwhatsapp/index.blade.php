@@ -21,9 +21,8 @@
         .status-fail { color: #c62828; }
     </style>
     @csrf
-    @php($hasSecret = $statusCfg['hasSecret'] ?? false)
-    @php($hasAccount = $statusCfg['hasAccount'] ?? false)
-    @php($cfgHint = ($hasSecret && $hasAccount) ? 'Config OK (WhatsAppConfig)' : 'Config belum lengkap: isi override di bawah atau update WhatsAppConfig')
+    @php($hasApiKey = $statusCfg['hasApiKey'] ?? false)
+    @php($cfgHint = ($hasApiKey) ? 'Config OK (ApiSecret digunakan sebagai DripSender api_key)' : 'Config belum lengkap: isi api_key override di bawah atau update WhatsAppConfig.ApiSecret')
 </head>
 <body>
 <div class="container">
@@ -34,7 +33,7 @@
         {{ csrf_field() }}
         <div class="row">
             <div class="col">
-                <label>Recipient (msisdn)</label>
+                <label>Recipient</label>
                 <input type="text" name="recipient" value="{{ old('recipient', $recipient ?? '') }}" placeholder="contoh: 081234567890 atau 6281234567890" />
             </div>
             <div class="col">
@@ -51,11 +50,11 @@
         <div class="row">
             <div class="col">
                 <label>Secret (override, opsional)</label>
-                <input type="text" name="secret" value="{{ old('secret', $overrideSecret ?? '') }}" placeholder="Jika kosong, pakai dari WhatsAppConfig" />
+                <input type="text" name="secret" value="{{ old('secret', $overrideSecret ?? '') }}" placeholder="Jika kosong, pakai dari WhatsAppConfig.ApiSecret" />
             </div>
             <div class="col">
                 <label>Account (override, opsional)</label>
-                <input type="text" name="account" value="{{ old('account', $overrideAccount ?? '') }}" placeholder="Jika kosong, pakai dari WhatsAppConfig" />
+                <input type="text" name="account" value="{{ old('account', $overrideAccount ?? '') }}" placeholder="Jika kosong, pakai dari WhatsAppConfig.AccountUniqueId" />
             </div>
         </div>
         <div style="margin-top:12px">
@@ -82,7 +81,7 @@
         <h3>Request Preview (cURL)</h3>
         @if(!empty($curlPreview))
             <pre>{{ $curlPreview }}</pre>
-            <p class="muted">Catatan: secret dimasking untuk keamanan.</p>
+            <p class="muted">Catatan: api_key dimasking untuk keamanan.</p>
         @else
             <p class="muted">Preview akan muncul setelah kamu menekan "Kirim Test".</p>
         @endif

@@ -373,6 +373,24 @@ class ScalevWebhookController extends Controller
             ]);
         }
 
+        // Kirim WhatsApp berisi data license setelah payment status berubah (paid)
+        try {
+            if ($event === 'order.payment_status_changed') {
+                $this->sendWhatsappPaymentStatusChanged(
+                    $orderId,
+                    $orderPhone ?? $phone,
+                    $orderName ?: $name ?: $user->name,
+                    $orderEmail ?? $email ?? $user->email,
+                    $lic->license_key ?? ''
+                );
+            }
+        } catch (\Throwable $e) {
+            Log::channel('whatsapp')->warning('WA payment_status_changed exception', [
+                'error' => $e->getMessage(),
+                'order_id' => $orderId,
+            ]);
+        }
+
         return response()->json([
             'ok' => true,
             'result' => $created ? 'created' : 'updated',
@@ -496,8 +514,8 @@ class ScalevWebhookController extends Controller
             ->orderByDesc('Id')
             ->first();
 
-        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
-            Log::channel('whatsapp')->info('WA order.created not sent: missing ApiSecret/AccountUniqueId in WhatsAppConfig');
+        if (!$cfg || empty($cfg->ApiSecret)) {
+            Log::channel('whatsapp')->info('WA order.created not sent: missing ApiSecret (DripSender api_key) in WhatsAppConfig');
             return;
         }
 
@@ -506,6 +524,9 @@ class ScalevWebhookController extends Controller
         $target = preg_replace('/[^0-9+]/', '', $target);
         if (preg_match('/^0\d+$/', $target)) {
             $target = '62' . substr($target, 1);
+        }
+        if (preg_match('/^\+62\d+$/', $target)) {
+            $target = substr($target, 1);
         }
         if (!$target) {
             Log::channel('whatsapp')->info('WA order.created not sent: phone empty');
@@ -534,16 +555,18 @@ class ScalevWebhookController extends Controller
                 'price' => $priceText,
             ]);
 
-            // Kirim sebagai multipart/form-data sesuai Whapify
+            // Kirim sebagai multipart/form-data ke Whapify
+            $multipart = [
+                ['name' => 'secret', 'contents' => $cfg->ApiSecret],
+                ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
+                ['name' => 'recipient', 'contents' => $target],
+                ['name' => 'type', 'contents' => 'text'],
+                ['name' => 'message', 'contents' => $message],
+            ];
+
             $resp = Http::timeout(20)
-                ->asMultipart()
-                ->post('https://whapify.id/api/send/whatsapp', [
-                    'secret' => $cfg->ApiSecret,
-                    'account' => $cfg->AccountUniqueId,
-                    'recipient' => $target,
-                    'type' => 'text',
-                    'message' => $message,
-                ]);
+                ->withOptions(['multipart' => $multipart])
+                ->post('https://whapify.id/api/send/whatsapp');
 
             if ($resp->ok()) {
                 Log::channel('whatsapp')->info('WA order.created sent via Whapify', [
@@ -557,6 +580,106 @@ class ScalevWebhookController extends Controller
             }
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->warning('WA order.created exception via Whapify', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Kirim WhatsApp berisi informasi license ketika payment status berubah (paid).
+     * Format pesan:
+     * Data License Mesin Cuan Maximal
+     * Nama: {name}
+     * Email: {email}
+     * License: {license}
+     * Version: {InstallerVersion}
+     * Link Installer:
+     * {InstallerLink}
+     * Untuk tutorial ada digroup telegram ya kak silakan bergabung
+     * {GroupLink}
+     * Terimakasih
+     */
+    private function sendWhatsappPaymentStatusChanged(string $orderId, ?string $phone, string $name, string $email, string $licenseKey): void
+    {
+        // Ambil konfigurasi WhatsApp terbaru untuk secret/account + installer data
+        $cfg = DB::table('WhatsAppConfig')
+            ->orderByDesc('UpdatedAt')
+            ->orderByDesc('Id')
+            ->first();
+
+        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+            Log::channel('whatsapp')->info('WA payment_status_changed not sent: missing ApiSecret/AccountUniqueId in WhatsAppConfig');
+            return;
+        }
+
+        // Jika phone kosong, coba ambil dari tabel OrderData berdasarkan OrderId
+        if (empty($phone)) {
+            $row = DB::table('OrderData')->where('OrderId', $orderId)->first();
+            if ($row && !empty($row->Phone)) {
+                $phone = (string)$row->Phone;
+            }
+        }
+
+        // Normalisasi nomor telepon: hapus spasi/simbol, ganti awalan 0 -> 62
+        $target = preg_replace('/\s+/', '', (string)$phone);
+        $target = preg_replace('/[^0-9+]/', '', $target);
+        if (preg_match('/^0\d+$/', $target)) {
+            $target = '62' . substr($target, 1);
+        }
+        if (!$target) {
+            Log::channel('whatsapp')->info('WA payment_status_changed not sent: phone empty');
+            return;
+        }
+
+        $installerVersion = $cfg->InstallerVersion ?? '';
+        $installerLink = $cfg->InstallerLink ?? '';
+        $groupLink = $cfg->GroupLink ?? '';
+
+        $safeName = $name ?: (strstr($email, '@', true) ?: 'Member');
+        $message = "Data License Mesin Cuan Maximal\n\n".
+            "Nama: {$safeName}\n".
+            "Email: {$email}\n".
+            "License: {$licenseKey}\n".
+            "Version: {$installerVersion}\n".
+            "Link Installer:\n\n".
+            "{$installerLink}\n\n".
+            "Untuk tutorial ada digroup telegram ya kak silakan bergabung\n".
+            "{$groupLink}\n\n".
+            "Terimakasih";
+
+        // Kirim via Whapify API (multipart/form-data)
+        try {
+            Log::channel('whatsapp')->info('Attempting WA payment_status_changed via Whapify', [
+                'phone' => $target,
+                'license' => $licenseKey,
+                'version' => $installerVersion,
+            ]);
+
+            $multipart = [
+                ['name' => 'secret', 'contents' => $cfg->ApiSecret],
+                ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
+                ['name' => 'recipient', 'contents' => $target],
+                ['name' => 'type', 'contents' => 'text'],
+                ['name' => 'message', 'contents' => $message],
+            ];
+
+            $resp = Http::timeout(20)
+                ->withOptions(['multipart' => $multipart])
+                ->post('https://whapify.id/api/send/whatsapp');
+
+            if ($resp->ok()) {
+                Log::channel('whatsapp')->info('WA payment_status_changed sent via Whapify', [
+                    'phone' => $target,
+                    'license' => $licenseKey,
+                ]);
+            } else {
+                Log::channel('whatsapp')->warning('WA payment_status_changed send failed via Whapify', [
+                    'status' => $resp->status(),
+                    'body' => $resp->body(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::channel('whatsapp')->warning('WA payment_status_changed exception via Whapify', [
                 'error' => $e->getMessage(),
             ]);
         }

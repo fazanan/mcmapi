@@ -1,1 +1,189 @@
- public\/index.php:20\n\n## Request\n\nPOST \/api\/webhooks\/scalev\n\n## Headers\n\n* **x-scalev-hmac-sha256**: TwZO9oPeIRtcsVfIOUQ4khVk1ODbw5QR5l2jthS2ri0=\n* **user-agent**: req\/0.5.15\n* **request-id**: 6f75fc80-8e77-4b0b-bbf1-cb5fed5ff861\n* **content-type**: application\/json\n* **accept-encoding**: gzip\n* **host**: maximalcuan.com\n* **content-length**: 1626\n\n## Route Context\n\ncontroller: App\\Http\\Controllers\\ScalevWebhookController@handle\nmiddleware: web\n\n## Route Parameters\n\nNo route parameter data available.\n\n## Database Queries\n\n* mysql - select * from `sessions` where `id` = \u0027s4faBR0RBGRmtCkcJc3VyFHegS3UE1eVS2h9QQWn\u0027 limit 1 (2.05 ms)\n* mysql - select * from `users` where `email` is null limit 1 (0.46 ms)\n' </script> <div class="flex items-center justify-between" x-data="{ copied: false, async copyToClipboard() { try { await window.copyToClipboard(markdown); this.copied = true; setTimeout(() => { this.copied = false }, 3000); } catch (err) { console.error('Failed to copy the markdown: ', err); } } }" > <div class="flex items-center gap-2 h-[56px]"> <div class="w-[18px] h-[18px] flex items-center justify-center bg-rose-500 rounded-md"> <svg width="2" height="10" class="text-white" viewBox="0 0 2 10" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M1.00006 6.3188C1.41416 6.3188 1.75006 5.98295 1.75006 5.56885V1.43115C1.75006 1.01705 1.41416 0.681152 1.00006 0.681152C0.585961 0.681152 0.250061 1.01705 0.250061 1.43115V5.56885C0.250061 5.98295 0.585961 6.3188 1.00006 6.3188Z" fill="currentColor" /> <path d="M1.00006 9.41699C1.55235 9.41699 2.00007 8.96929 2.00007 8.41699C2.00007 7.86469 1.55235 7.41699 1.00006 7.41699C0.447781 7.41699 6.10352e-05 7.86469 6.10352e-05 8.41699C6.10352e-05 8.96929 0.447781 9.41699 1.00006 9.41699Z" fill="currentColor "/> </svg> </div> <div class="font-medium text-sm text-neutral-900 dark:text-white"> Internal Server Error </div> </div> <button x-cloak class="text-sm rounded-md border px-3 h-8 flex items-center gap-2 transition-colors duration-200 ease-in-out cursor-pointer shadow-xs text-neutral-600 dark:text-neutral-400 bg-white/5 border-neutral-200 hover:bg-neutral-100 dark:bg-white/5 dark:border-white/10 dark:hover:bg-white/10" @click="copyToClipboard()" > <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none" class="w-3 h-3" x-show="!copied"> <g clip-path="url(#clip0_14732_6079)"> <path d="M4.25 4.25012V1.25012H10.75V7.75012H7.75M7.75 4.25012H1.25V10.7501H7.75V4.25012Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/> </g> <defs> <clipPath id="clip0_14732_6079"> <rect width="12" height="12" /> </clipPath> </defs> </svg> <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="w-3 h-3 text-emerald-500" x-show="copied"> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path> </svg> <span x-text="copied ? 'Copied to clipboard' : 'Copy as Markdown'"></span> </button> </div> </section> <div class="h-0 w-full relative"> <div class="absolute top-[-1px] left-0 right-0 bottom-0 border-t border-dashed border-neutral-300 dark:border-white/[9%]"></div> </div> <section class="w-full max-w-7xl mx-auto p-4 sm:p-14 border-x border-dashed border-neutral-300 dark:border-white/[9%] flex flex-col gap-8 py-0 sm:py-0" > <div class="flex flex-col pt-8 sm:pt-16 overflow-x-auto"> <div class="flex flex-col gap-5 mb-8"> <h1 class="text-3xl font-semibold text-neutral-950 dark:text-white">Illuminate\Database\QueryException</h1> <div class="truncate font-mono text-xs text-neutral-500 dark:text-neutral-400 -mt-3 text-xs" dir="ltr" > <span data-tippy-content="vendor/laravel/framework/src/Illuminate/Database/Connection.php:824"> vendor/laravel/framework/src/Illuminate/Database/Connection.php<span class="text-neutral-500">:824</span> </span> </div> <p class="text-xl font-light text-neutral-800 dark:text-neutral-300"> SQLSTATE[23000]: Integrity constraint violation: 1048 Column &#039;name&#039; cannot be null (Connection: mysql, SQL: insert into `users` (`name`, `email`, `phone`, `role`, `password`, `updated_at`, `created_at`) values (?, ?, ?, member, $2y$12$I8wREmxlqIehYydKYPIh7e1DWMmk8GUgN.8zmu6Gfj6qKL51c2XJy, 2025-12-04 04:01:27, 2025-12-04 04:01:27)) </p> </div> <div class="flex items-start gap-2 mb-8 sm:mb-16"> <div class="bg-white dark:bg-white/[3%] border border-neutral-200 dark:border-white/10 divide-x divide-neutral-200 dark:divide-white/10 rounded-md shadow-xs flex items-center gap-0.5"> <div class="flex items-center gap-1.5 h-6 px-[6px] font-mono text-[13px]"> <span class="text-neutral-400 dark:text-neutral-500">LARAVEL</span> <span class="text-neutral-500 dark:text-neutral-300">12.38.1</span> </div> <div class="flex items-center gap-1.5 h-6 px-[6px] font-mono text-[13px]"> <span class="text-neutral-400 dark:text-neutral-500">PHP</span> <span class="text-neutral-500 dark:text-neutral-300">8.2.29</span> </div> </div> <div class="inline-flex w-fit shrink-0 items-center justify-center gap-1 font-mono leading-3 uppercase transition-colors dark:border [&amp;_svg]:size-2.5 h-6 min-w-5 rounded-md px-1.5 text-xs/none bg-rose-200 text-rose-900 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-100 dark:[&amp;_svg]:!text-white"> <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5"> <g clip-path="url(#clip0_14732_6105)"> <path d="M9.87466 7.8287L5.92654 0.549947C5.82917 0.369362 5.68068 0.221523 5.49966 0.124947C5.25374 -0.00665839 4.9658 -0.0358401 4.69847 0.0437494C4.43115 0.123339 4.20606 0.305262 4.07216 0.549947L0.124664 7.8287C0.0383472 7.98887 -0.00481098 8.16875 -0.000569449 8.35066C0.00367208 8.53256 0.0551674 8.71024 0.148856 8.86622C0.242546 9.0222 0.375205 9.15112 0.533798 9.24031C0.692391 9.32951 0.871462 9.37591 1.05341 9.37495H8.94591C9.12031 9.37495 9.29203 9.33202 9.44591 9.24995C9.56783 9.18524 9.67572 9.09703 9.76338 8.99041C9.85104 8.8838 9.91672 8.76088 9.95663 8.62876C9.99655 8.49663 10.0099 8.35791 9.99595 8.22059C9.98199 8.08328 9.94036 7.95009 9.87466 7.8287ZM4.99966 8.12495C4.87605 8.12495 4.75521 8.08829 4.65243 8.01962C4.54965 7.95094 4.46954 7.85333 4.42224 7.73912C4.37493 7.62492 4.36256 7.49925 4.38667 7.37802C4.41079 7.25678 4.47031 7.14541 4.55772 7.05801C4.64513 6.9706 4.75649 6.91107 4.87773 6.88696C4.99897 6.86284 5.12464 6.87522 5.23884 6.92252C5.35304 6.96983 5.45066 7.04993 5.51933 7.15272C5.58801 7.2555 5.62466 7.37633 5.62466 7.49995C5.62466 7.66571 5.55882 7.82468 5.44161 7.94189C5.3244 8.0591 5.16542 8.12495 4.99966 8.12495ZM5.62466 5.93745C5.62466 6.02033 5.59174 6.09981 5.53313 6.15842C5.47453 6.21702 5.39504 6.24995 5.31216 6.24995H4.68716C4.60428 6.24995 4.5248 6.21702 4.46619 6.15842C4.40759 6.09981 4.37466 6.02033 4.37466 5.93745V3.43745C4.37466 3.35457 4.40759 3.27508 4.46619 3.21648C4.5248 3.15787 4.60428 3.12495 4.68716 3.12495H5.31216C5.39504 3.12495 5.47453 3.15787 5.53313 3.21648C5.59174 3.27508 5.62466 3.35457 5.62466 3.43745V5.93745Z" fill="currentColor" /> </g> <defs> <clipPath id="clip0_14732_6105"> <rect width="10" height="10" /> </clipPath> </defs> </svg> UNHANDLED </div> <div class="inline-flex w-fit shrink-0 items-center justify-center gap-1 font-mono leading-3 uppercase transition-colors dark:border [&amp;_svg]:size-2.5 h-6 min-w-5 rounded-md px-1.5 text-xs/none bg-rose-600 dark:border-rose-500 dark:bg-rose-600 text-white dark:text-white [&amp;_svg]:!text-white"> CODE 23000 </div> </div> <div x-data="{ copied: false, async copyToClipboard() { try { await window.copyToClipboard('https://maximalcuan.com/api/webhooks/scalev'); this.copied = true; setTimeout(() => { this.copied = false }, 3000); } catch (err) { console.error('Failed to copy the requestURL: ', err); } } }" class="bg-white dark:bg-[#1a1a1a] border border-neutral-200 dark:border-white/10 rounded-lg flex items-center justify-between h-10 px-2 shadow-xs relative z-50" > <div class="flex items-center gap-3 w-full"> <div class="inline-flex w-fit shrink-0 items-center justify-center gap-1 font-mono leading-3 uppercase transition-colors dark:border [&amp;_svg]:size-2.5 h-6 min-w-5 rounded-md px-1.5 text-xs/none bg-rose-600 dark:border-rose-500 dark:bg-rose-600 text-white dark:text-white [&amp;_svg]:!text-white"> <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5"> <g clip-path="url(#clip0_14732_6105)"> <path d="M9.87466 7.8287L5.92654 0.549947C5.82917 0.369362 5.68068 0.221523 5.49966 0.124947C5.25374 -0.00665839 4.9658 -0.0358401 4.69847 0.0437494C4.43115 0.123339 4.20606 0.305262 4.07216 0.549947L0.124664 7.8287C0.0383472 7.98887 -0.00481098 8.16875 -0.000569449 8.35066C0.00367208 8.53256 0.0551674 8.71024 0.148856 8.86622C0.242546 9.0222 0.375205 9.15112 0.533798 9.24031C0.692391 9.32951 0.871462 9.37591 1.05341 9.37495H8.94591C9.12031 9.37495 9.29203 9.33202 9.44591 9.24995C9.56783 9.18524 9.67572 9.09703 9.76338 8.99041C9.85104 8.8838 9.91672 8.76088 9.95663 8.62876C9.99655 8.49663 10.0099 8.35791 9.99595 8.22059C9.98199 8.08328 9.94036 7.95009 9.87466 7.8287ZM4.99966 8.12495C4.87605 8.12495 4.75521 8.08829 4.65243 8.01962C4.54965 7.95094 4.46954 7.85333 4.42224 7.73912C4.37493 7.62492 4.36256 7.49925 4.38667 7.37802C4.41079 7.25678 4.47031 7.14541 4.55772 7.05801C4.64513 6.9706 4.75649 6.91107 4.87773 6.88696C4.99897 6.86284 5.12464 6.87522 5.23884 6.92252C5.35304 6.96983 5.45066 7.04993 5.51933 7.15272C5.58801 7.2555 5.62466 7.37633 5.62466 7.49995C5.62466 7.66571 5.55882 7.82468 5.44161 7.94189C5.3244 8.0591 5.16542 8.12495 4.99966 8.12495ZM5.62466 5.93745C5.62466 6.02033 5.59174 6.09981 5.53313 6.15842C5.47453 6.21702 5.39504 6.24995 5.31216 6.24995H4.68716C4.60428 6.24995 4.5248 6.21702 4.46619 6.15842C4.40759 6.09981 4.37466 6.02033 4.37466 5.93745V3.43745C4.37466 3.35457 4.40759 3.27508 4.46619 3.21648C4.5248 3.15787 4.60428 3.12495 4.68716 3.12495H5.31216C5.39504 3.12495 5.47453 3.15787 5.53313 3.21648C5.59174 3.27508 5.62466 3.35457 5.62466 3.43745V5.93745Z" fill="currentColor" /> </g> <defs> <clipPath id="clip0_14732_6105"> <rect width="10" height="10" /> </clipPath> </defs> </svg> 500 </div> <div class="inline-flex w-fit shrink-0 items-center justify-center gap-1 font-mono leading-3 uppercase transition-colors dark:border [&amp;_svg]:size-2.5 h-6 min-w-5 rounded-md px-1.5 text-xs/none bg-emerald-200 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-900/70 dark:text-emerald-400"> <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5"> <path d="M5.99996 10.6876C7.10936 10.6876 8.00871 8.58896 8.00871 6.00012C8.00871 3.41129 7.10936 1.31262 5.99996 1.31262C4.89056 1.31262 3.99121 3.41129 3.99121 6.00012C3.99121 8.58896 4.89056 10.6876 5.99996 10.6876Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/> <path d="M1.3125 6.00012H10.6875" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/> <path d="M6 10.6876C8.58883 10.6876 10.6875 8.58896 10.6875 6.00012C10.6875 3.41129 8.58883 1.31262 6 1.31262C3.41117 1.31262 1.3125 3.41129 1.3125 6.00012C1.3125 8.58896 3.41117 10.6876 6 10.6876Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/> </svg> POST </div> <div class="flex-1 text-sm font-light truncate text-neutral-950 dark:text-white">
+{
+    "event": "order.payment_status_changed",
+    "unique_id": "event_semlTshLcMVNVGDFPQbkmaQK",
+    "timestamp": "2025-12-05T13:14:16.991012Z",
+    "data": {
+        "id": 6639522,
+        "customer_id": 19037908,
+        "customer": {
+            "id": 19037908,
+            "email": "herbalmakasar.id@gmail.com",
+            "phone": null,
+            "name": "Qosim 2",
+            "confirmed_at": null,
+            "created_at": "2025-12-05T13:12:31Z",
+            "last_updated_at": "2025-12-05T13:13:52Z",
+            "status": "active"
+        },
+        "order_id": "251205OJWBYLK",
+        "business": {
+            "username": "rudianto",
+            "unique_id": "WGMPLHA4MKFVR4VO",
+            "client_id": "103e5577-26db-42cb-9128-def05f955db2"
+        },
+        "is_probably_spam": false,
+        "mark_as_spam_by": null,
+        "created_at": "2025-12-05T13:13:52Z",
+        "last_updated_at": "2025-12-05T13:14:16Z",
+        "payment_status": "paid",
+        "payment_account_id": null,
+        "epayment_provider": null,
+        "payment_method": "qris",
+        "sub_payment_method": null,
+        "financial_entity": null,
+        "payment_account_holder": null,
+        "payment_account_number": null,
+        "transferproof_url": null,
+        "pg_payment_info": {
+            "actions": [],
+            "amount": 550000,
+            "business_id": "674dcc0e6c99c38a76fefd99",
+            "capture_method": "AUTOMATIC",
+            "card_verification_results": null,
+            "channel_properties": null,
+            "country": "ID",
+            "created": "2025-12-05T13:13:53.138080981Z",
+            "currency": "IDR",
+            "customer_id": null,
+            "description": "Pembayaran 251205OJWBYLK di Maximal Cuan Mesin",
+            "failure_code": null,
+            "id": "pr-02efdc39-f3a1-4e84-85af-ff242ca33acf",
+            "initiator": null,
+            "items": null,
+            "metadata": {
+                "order_id": "251205OJWBYLK",
+                "user_id": "674dcc0e6c99c38a76fefd99",
+                "with_split_rule": "splitru_300198f3-57a5-4239-b663-7629debc0295"
+            },
+            "payment_method": {
+                "billing_information": {
+                    "city": null,
+                    "country": "",
+                    "postal_code": null,
+                    "province_state": null,
+                    "street_line1": null,
+                    "street_line2": null
+                },
+                "card": null,
+                "created": "2025-12-05T13:13:53.232195369Z",
+                "description": null,
+                "direct_bank_transfer": null,
+                "direct_debit": null,
+                "ewallet": null,
+                "id": "pm-7aecf47a-4bcb-4076-b161-7c5377faf36e",
+                "metadata": null,
+                "over_the_counter": null,
+                "qr_code": {
+                    "amount": 550000,
+                    "channel_code": "XENDIT",
+                    "channel_properties": {
+                        "expires_at": "2025-12-07T13:13:53.192975Z",
+                        "qr_string": "00020101021226650013CO.XENDIT.WWW01189360084800000000700215TCbmScHNHjS8VJ20303UME51370014ID.CO.QRIS.WWW0215ID202435700269852045099530336054065500005802ID5906Scalev6015JAKARTA SELATAN61051221062290525Qbb0J59csKPP5d9wLVjM6tKst6304D125"
+                    },
+                    "currency": "IDR"
+                },
+                "reference_id": "205d005d-86c6-4791-8c1a-6e9c64bbb48e",
+                "reusability": "ONE_TIME_USE",
+                "status": "ACTIVE",
+                "type": "QR_CODE",
+                "updated": "2025-12-05T13:13:53.232195369Z",
+                "virtual_account": null
+            },
+            "reference_id": "251205OJWBYLK",
+            "shipping_information": null,
+            "status": "PENDING",
+            "updated": "2025-12-05T13:13:53.138080981Z"
+        },
+        "pg_reference_id": "205d005d-86c6-4791-8c1a-6e9c64bbb48e",
+        "pg_paid_info": {
+            "amount": 550000,
+            "channel_properties": null,
+            "country": "ID",
+            "created": "2025-12-05T13:14:09Z",
+            "currency": "IDR",
+            "customer_id": null,
+            "description": "Pembayaran 251205OJWBYLK di Maximal Cuan Mesin",
+            "failure_code": null,
+            "id": "qrpy_d1500604-5b38-4083-81df-421c32b03f57",
+            "items": null,
+            "metadata": {
+                "order_id": "251205OJWBYLK",
+                "user_id": "674dcc0e6c99c38a76fefd99",
+                "with_split_rule": "splitru_300198f3-57a5-4239-b663-7629debc0295"
+            },
+            "payment_detail": {
+                "customer_pan": "9360000210031310352",
+                "issuer_name": "BRI",
+                "merchant_pan": "9360084800000000704",
+                "name": "QOSIM",
+                "receipt_id": "941438824808"
+            },
+            "payment_method": {
+                "billing_information": {
+                    "city": null,
+                    "country": "",
+                    "postal_code": null,
+                    "province_state": null,
+                    "street_line1": null,
+                    "street_line2": null
+                },
+                "card": null,
+                "created": "2025-12-05T13:13:53.232195Z",
+                "description": null,
+                "direct_bank_transfer": null,
+                "direct_debit": null,
+                "ewallet": null,
+                "id": "pm-7aecf47a-4bcb-4076-b161-7c5377faf36e",
+                "metadata": null,
+                "over_the_counter": null,
+                "qr_code": {
+                    "amount": 550000,
+                    "channel_code": "XENDIT",
+                    "channel_properties": {
+                        "expires_at": "2025-12-07T13:13:53.192975Z",
+                        "qr_string": "00020101021226650013CO.XENDIT.WWW01189360084800000000700215TCbmScHNHjS8VJ20303UME51370014ID.CO.QRIS.WWW0215ID202435700269852045099530336054065500005802ID5906Scalev6015JAKARTA SELATAN61051221062290525Qbb0J59csKPP5d9wLVjM6tKst6304D125"
+                    },
+                    "currency": "IDR"
+                },
+                "reference_id": "205d005d-86c6-4791-8c1a-6e9c64bbb48e",
+                "reusability": "ONE_TIME_USE",
+                "status": "EXPIRED",
+                "type": "QR_CODE",
+                "updated": "2025-12-05T13:14:16.020504672Z",
+                "virtual_account": null
+            },
+            "payment_request_id": "pr-02efdc39-f3a1-4e84-85af-ff242ca33acf",
+            "reference_id": "205d005d-86c6-4791-8c1a-6e9c64bbb48e",
+            "status": "SUCCEEDED",
+            "updated": "2025-12-05T13:14:09Z"
+        },
+        "unpaid_time": "2025-12-05T13:13:52Z",
+        "paid_time": "2025-12-05T13:14:16Z",
+        "conflict_time": null,
+        "settled_time": null,
+        "transfer_time": null,
+        "payment_status_history": [
+            {
+                "at": "2025-12-05T13:13:52Z",
+                "by": {
+                    "avatar": "",
+                    "email": "rudianto2008@gmail.com",
+                    "name": "RUDIANTO"
+                },
+                "status": "unpaid"
+            },
+            {
+                "at": "2025-12-05T13:14:16.455856Z",
+                "by": {
+                    "avatar": "https://ica-data.s3.ap-southeast-1.amazonaws.com/logo.webp",
+                    "email": "system@scalev.id",
+                    "name": "Scalev"
+                },
+                "status": "paid"
+            }
+        ],
+        "metadata": {
+            "event_source_url": "https://mesincuanmaximal.com/checkout-page"
+        }
+    }
+}
