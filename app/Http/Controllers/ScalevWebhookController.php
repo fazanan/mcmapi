@@ -24,7 +24,7 @@ class ScalevWebhookController extends Controller
     {
         // Follow ScaleV docs: verify X-Scalev-Hmac-Sha256 (base64 HMAC-SHA256 of raw JSON)
         $rawBody = $request->getContent();
-        $secret = env('SCALEV_WEBHOOK_SECRET');
+        $secret = 'xaqE3BwP3VWzYj8lfVVWEu4GDylPyRGR';
         $enforce = filter_var(env('SCALEV_WEBHOOK_ENFORCE', true), FILTER_VALIDATE_BOOLEAN);
         if ($enforce && !empty($secret)) {
             $sigVal = $request->header('X-Scalev-Hmac-Sha256')
