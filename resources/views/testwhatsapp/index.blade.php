@@ -79,6 +79,16 @@
     </div>
 
     <div class="card">
+        <h3>Request Preview (cURL)</h3>
+        @if(!empty($curlPreview))
+            <pre>{{ $curlPreview }}</pre>
+            <p class="muted">Catatan: secret dimasking untuk keamanan.</p>
+        @else
+            <p class="muted">Preview akan muncul setelah kamu menekan "Kirim Test".</p>
+        @endif
+    </div>
+
+    <div class="card">
         <h3>Tail Log WhatsApp (100 baris terakhir)</h3>
         @if(!empty($logTail))
             <pre>@foreach($logTail as $ln){{ $ln }}

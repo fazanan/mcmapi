@@ -1079,6 +1079,7 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
     $message = (string)($request->input('message') ?? 'Halo, ini test kiriman WhatsApp dari halaman admin.');
     $overrideSecret = $request->input('secret');
     $overrideAccount = $request->input('account');
+    $curlPreview = null;
 
     // Ambil config WhatsApp terbaru
     $cfg = DB::table('WhatsAppConfig')->orderByDesc('UpdatedAt')->orderByDesc('Id')->first();
@@ -1103,20 +1104,19 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
                 $result = ['ok'=>false,'status'=>0,'body'=>'Recipient kosong atau tidak valid.'];
             } else {
                 Log::channel('whatsapp')->info('Test WA page: Attempting send', ['recipient'=>$target]);
-                // Beberapa integrasi Whapify menerima 'account' dan ada yang meminta 'accountUniqueId'.
-                // Demikian pula 'message' vs 'text'. Untuk kompatibilitas, kirim keduanya.
-                $multipart = [
-                    ['name'=>'secret','contents'=>$secret],
-                    ['name'=>'account','contents'=>$account],
-                    ['name'=>'accountUniqueId','contents'=>$account],
-                    ['name'=>'recipient','contents'=>$target],
-                    ['name'=>'type','contents'=>'text'],
-                    ['name'=>'message','contents'=>$message],
-                    ['name'=>'text','contents'=>$message],
-                ];
+                // Bangun preview cURL (masking secret) untuk membantu debugging.
+                $maskedSecret = strlen($secret) > 8 ? substr($secret,0,6).'•••'.substr($secret,-2) : '•••';
+                $curlPreview = 'curl -X POST "https://whapify.id/api/send/whatsapp" \\\n   -H "Content-Type: multipart/form-data" \\\n   -F "secret='.$maskedSecret.'" \\\n   -F "account='.$account.'" \\\n   -F "recipient='.$target.'" \\\n   -F "type=text" \\\n   -F "message='.$message.'"';
+                // Kirim sebagai multipart persis seperti Postman/cURL: gunakan asMultipart()
                 $resp = \Illuminate\Support\Facades\Http::timeout(20)
-                    ->withOptions(['multipart' => $multipart])
-                    ->post('https://whapify.id/api/send/whatsapp');
+                    ->asMultipart()
+                    ->post('https://whapify.id/api/send/whatsapp', [
+                        'secret' => $secret,
+                        'account' => $account,
+                        'recipient' => $target,
+                        'type' => 'text',
+                        'message' => $message,
+                    ]);
 
                 // Terkadang API mengembalikan HTTP 200 tetapi body JSON menyatakan gagal (status!=200/data=false).
                 $bodyText = $resp->body();
@@ -1131,14 +1131,50 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
 
                 if ($logicalOk && $logicalStatus === 200) {
                     Log::channel('whatsapp')->info('Test WA page: Sent', ['recipient'=>$target, 'http'=>$resp->status(), 'json_status'=>$logicalStatus]);
+                    $result = ['ok'=>true,'status'=>200,'body'=>$bodyText];
                 } else {
                     Log::channel('whatsapp')->warning('Test WA page: Failed', [
                         'http'=>$resp->status(),
                         'json_status'=>$is_array = is_array($json) ? ($json['status'] ?? null) : null,
                         'body'=>$bodyText,
                     ]);
+                    // Fallback: coba ulang dengan awalan '+' jika belum memakai plus
+                    if (!str_starts_with($target, '+')) {
+                        $targetPlus = '+' . $target;
+                        Log::channel('whatsapp')->info('Test WA page: Retry with plus prefix', ['recipient'=>$targetPlus]);
+                        $resp2 = \Illuminate\Support\Facades\Http::timeout(20)
+                            ->asMultipart()
+                            ->post('https://whapify.id/api/send/whatsapp', [
+                                'secret' => $secret,
+                                'account' => $account,
+                                'recipient' => $targetPlus,
+                                'type' => 'text',
+                                'message' => $message,
+                            ]);
+                        $bodyText2 = $resp2->body();
+                        $json2 = null; try { $json2 = json_decode($bodyText2, true, 512, JSON_THROW_ON_ERROR); } catch (\Throwable $e) { $json2 = null; }
+                        $logicalOk2 = $resp2->ok();
+                        $logicalStatus2 = $resp2->status();
+                        if (is_array($json2)) {
+                            if (isset($json2['status']) && is_numeric($json2['status'])) { $logicalStatus2 = (int)$json2['status']; }
+                            if (array_key_exists('data', $json2)) { $logicalOk2 = $logicalOk2 && (bool)$json2['data']; }
+                        }
+                        if ($logicalOk2 && $logicalStatus2 === 200) {
+                            Log::channel('whatsapp')->info('Test WA page: Sent after retry', ['recipient'=>$targetPlus, 'http'=>$resp2->status(), 'json_status'=>$logicalStatus2]);
+                            $result = ['ok'=>true,'status'=>200,'body'=>$bodyText2];
+                            $curlPreview = 'curl -X POST "https://whapify.id/api/send/whatsapp" \\\n+  -H "Content-Type: multipart/form-data" \\\n+  -F "secret='.$maskedSecret.'" \\\n+  -F "account='.$account.'" \\\n+  -F "recipient='.$targetPlus.'" \\\n+  -F "type=text" \\\n+  -F "message='.$message.'"';
+                        } else {
+                            Log::channel('whatsapp')->warning('Test WA page: Retry failed', [
+                                'http'=>$resp2->status(),
+                                'json_status'=>is_array($json2) ? ($json2['status'] ?? null) : null,
+                                'body'=>$bodyText2,
+                            ]);
+                            $result = ['ok'=>false,'status'=>$logicalStatus,'body'=>$bodyText];
+                        }
+                    } else {
+                        $result = ['ok'=>false,'status'=>$logicalStatus,'body'=>$bodyText];
+                    }
                 }
-                $result = ['ok'=>$logicalOk,'status'=>$logicalStatus,'body'=>$bodyText];
             }
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->warning('Test WA page: Exception', ['error'=>$e->getMessage()]);
@@ -1164,5 +1200,6 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
         'overrideSecret' => $overrideSecret,
         'overrideAccount' => $overrideAccount,
         'logTail' => $logTail,
+        'curlPreview' => $curlPreview,
     ]);
 })->middleware(['auth','role:admin']);

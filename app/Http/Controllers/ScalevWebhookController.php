@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Mail;
 
 class ScalevWebhookController extends Controller
 {
@@ -183,7 +184,24 @@ class ScalevWebhookController extends Controller
         }
 
         if (!$isPaidTransition) {
-            // For non-paid events, still log/save order row for visibility
+            // Untuk event non-paid, tetap log/save order row.
+            // Jika event adalah order.created, kirim WhatsApp reminder pembayaran.
+            try {
+                if ($event === 'order.created' && !empty($phone)) {
+                    $this->sendWhatsappOrderCreated(
+                        $phone,
+                        $name,
+                        $productName,
+                        $variantPrice ?? $netRevenue
+                    );
+                }
+            } catch (\Throwable $e) {
+                Log::channel('whatsapp')->warning('Gagal mengirim WhatsApp order.created', [
+                    'error' => $e->getMessage(),
+                    'order_id' => $orderId,
+                ]);
+            }
+
             return response()->json([
                 'ok' => true,
                 'result' => 'logged',
@@ -345,6 +363,16 @@ class ScalevWebhookController extends Controller
             ]);
         }
 
+        // Selalu kirim email berisi informasi login & license setelah status paid
+        try {
+            $this->sendEmailLoginLicense($user, $created ? $plainPassword : null, $lic, $orderRow, $statusText);
+        } catch (\Throwable $e) {
+            Log::warning('Gagal mengirim email info login/license', [
+                'error' => $e->getMessage(),
+                'user_email' => $user ? $user->email : null,
+            ]);
+        }
+
         return response()->json([
             'ok' => true,
             'result' => $created ? 'created' : 'updated',
@@ -454,5 +482,155 @@ class ScalevWebhookController extends Controller
     {
         $formatted = number_format($amount, 0, ',', '.');
         return 'Rp ' . $formatted;
+    }
+
+    /**
+     * Mengirim WhatsApp untuk event order.created agar user menyelesaikan pembayaran.
+     * Menggunakan field: secret, account, recipient, type=text, message.
+     */
+    private function sendWhatsappOrderCreated(string $phone, ?string $name, ?string $productName, $price): void
+    {
+        // Ambil konfigurasi WhatsApp terbaru
+        $cfg = DB::table('WhatsAppConfig')
+            ->orderByDesc('UpdatedAt')
+            ->orderByDesc('Id')
+            ->first();
+
+        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+            Log::channel('whatsapp')->info('WA order.created not sent: missing ApiSecret/AccountUniqueId in WhatsAppConfig');
+            return;
+        }
+
+        // Normalisasi nomor telepon: hapus spasi/simbol, ganti awalan 0 -> 62
+        $target = preg_replace('/\s+/', '', $phone);
+        $target = preg_replace('/[^0-9+]/', '', $target);
+        if (preg_match('/^0\d+$/', $target)) {
+            $target = '62' . substr($target, 1);
+        }
+        if (!$target) {
+            Log::channel('whatsapp')->info('WA order.created not sent: phone empty');
+            return;
+        }
+
+        $safeName = $name ? $name : 'Kak';
+        $prod = $productName ? $productName : 'Produk MCM';
+        $priceText = is_numeric($price) ? $this->formatRupiah((float)$price) : '-';
+
+        // Susun pesan sesuai template yang diminta
+        $message = "Hai kak {$safeName}, 👋😊\n\n".
+            "Pesanan {$prod} sudah berhasil kami terima.\n\n".
+            "Supaya kakak bisa langsung pakai aplikasinya, silakan selesaikan pembayarannya ya.🙏\n\n".
+            "Totalnya dari hanya ~897.000~ menjadi hanya {$priceText}.\n\n".
+            "Sudah dapat semua Fitur MCM.🚀\n\n".
+            "Ada yang ingin ditanyakan?\n".
+            "Balas chat ini ya, kami siap bantu.😊\n\n".
+            "Salam,\n".
+            "*MCM Admin*";
+
+        try {
+            Log::channel('whatsapp')->info('Attempting WA order.created via Whapify', [
+                'phone' => $target,
+                'product' => $prod,
+                'price' => $priceText,
+            ]);
+
+            // Kirim sebagai multipart/form-data sesuai Whapify
+            $resp = Http::timeout(20)
+                ->asMultipart()
+                ->post('https://whapify.id/api/send/whatsapp', [
+                    'secret' => $cfg->ApiSecret,
+                    'account' => $cfg->AccountUniqueId,
+                    'recipient' => $target,
+                    'type' => 'text',
+                    'message' => $message,
+                ]);
+
+            if ($resp->ok()) {
+                Log::channel('whatsapp')->info('WA order.created sent via Whapify', [
+                    'phone' => $target,
+                ]);
+            } else {
+                Log::channel('whatsapp')->warning('WA order.created send failed via Whapify', [
+                    'status' => $resp->status(),
+                    'body' => $resp->body(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::channel('whatsapp')->warning('WA order.created exception via Whapify', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Mengirim email berisi informasi login & license setelah status paid.
+     * Password hanya disertakan ketika user baru dibuat (temporary password).
+     */
+    private function sendEmailLoginLicense($user, ?string $plainPassword, $lic, $orderRow, string $statusText): void
+    {
+        if (!$user || empty($user->email)) { return; }
+
+        // Informasi tambahan (installer, group) dari WhatsAppConfig bila tersedia
+        $cfg = DB::table('WhatsAppConfig')
+            ->orderByDesc('UpdatedAt')
+            ->orderByDesc('Id')
+            ->first();
+
+        $appUrl = rtrim(env('APP_URL', url('/')), '/');
+        $loginUrl = $appUrl . '/login';
+
+        $licenseKey = $lic ? ($lic->license_key ?? '') : '';
+        $productName = $orderRow ? ($orderRow->ProductName ?? '') : ($lic ? ($lic->product_name ?? '') : '');
+        $tenorDays = $lic ? ((int)($lic->tenor_days ?? 0)) : 0;
+        $expiresAt = $lic && !empty($lic->expires_at_utc)
+            ? Carbon::parse($lic->expires_at_utc)->setTimezone('Asia/Jakarta')->format('d-m-Y H:i')
+            : null;
+        $price = $orderRow ? ($orderRow->VariantPrice ?? null) : null;
+        $installerVersion = $cfg ? ($cfg->InstallerVersion ?? null) : null;
+        $installerLink = $cfg ? ($cfg->InstallerLink ?? null) : null;
+        $groupLink = $cfg ? ($cfg->GroupLink ?? null) : null;
+        $statusLicense = $lic ? ($lic->status ?? 'InActive') : 'InActive';
+        $priceText = $price !== null ? $this->formatRupiah((float)$price) : '-';
+
+        $passwordLine = $plainPassword ? "<li><strong>Password</strong>: {$plainPassword}</li>" : '';
+        $expiresLine = $expiresAt ? "<li><strong>Berlaku sampai</strong>: {$expiresAt} WIB</li>" : '';
+        $installerVerLine = $installerVersion ? "<li><strong>Installer Version</strong>: {$installerVersion}</li>" : '';
+        $installerLinkLine = $installerLink ? "<li><strong>Link Installer</strong>: <a href=\"{$installerLink}\" target=\"_blank\">{$installerLink}</a></li>" : '';
+        $groupLinkLine = $groupLink ? "<li><strong>Link Group</strong>: <a href=\"{$groupLink}\" target=\"_blank\">{$groupLink}</a></li>" : '';
+
+        $html = <<<HTML
+<div style="font-family: Arial, Helvetica, sans-serif; line-height:1.6;">
+  <p>Halo {$user->name},</p>
+  <p>Status pembayaran: <strong>{$statusText}</strong>. Berikut informasi akun dan license Anda:</p>
+  <ul>
+    <li><strong>Email</strong>: {$user->email}</li>
+    {$passwordLine}
+    <li><strong>Login</strong>: <a href="{$loginUrl}" target="_blank">{$loginUrl}</a></li>
+  </ul>
+  <p><strong>Detail Pembelian</strong></p>
+  <ul>
+    <li><strong>Produk</strong>: {$productName}</li>
+    <li><strong>License</strong>: {$licenseKey}</li>
+    <li><strong>Tenor</strong>: {$tenorDays} hari</li>
+    {$expiresLine}
+    <li><strong>Harga</strong>: {$priceText}</li>
+    <li><strong>Status License</strong>: {$statusLicense}</li>
+    {$installerVerLine}
+    {$installerLinkLine}
+    {$groupLinkLine}
+  </ul>
+  <p>Silakan login dan mulai menggunakan fitur. Jika butuh bantuan, balas email ini.</p>
+</div>
+HTML;
+
+        Mail::html($html, function ($m) use ($user) {
+            $m->to($user->email, $user->name)
+              ->subject('Info Akun & License - Pembayaran Berhasil');
+        });
+
+        Log::info('Email info login/license dikirim', [
+            'email' => $user->email,
+            'license_key' => $licenseKey,
+        ]);
     }
 }
