@@ -549,10 +549,15 @@ class ScalevWebhookController extends Controller
             "*MCM Admin*";
 
         try {
+            $maskedSecret = strlen((string)$cfg->ApiSecret) > 8
+                ? substr($cfg->ApiSecret, 0, 6) . '•••' . substr($cfg->ApiSecret, -2)
+                : '•••';
             Log::channel('whatsapp')->info('Attempting WA order.created via Whapify', [
                 'phone' => $target,
                 'product' => $prod,
                 'price' => $priceText,
+                'account' => $cfg->AccountUniqueId,
+                'secret_masked' => $maskedSecret,
             ]);
 
             // Kirim sebagai multipart/form-data ke Whapify
@@ -576,11 +581,13 @@ class ScalevWebhookController extends Controller
                 Log::channel('whatsapp')->info('WA order.created sent via Whapify', [
                     'phone' => $target,
                     'http' => $resp->status(),
+                    'account' => $cfg->AccountUniqueId,
                 ]);
             } else {
                 Log::channel('whatsapp')->warning('WA order.created send failed via Whapify', [
                     'status' => $resp->status(),
                     'body' => $resp->body(),
+                    'account' => $cfg->AccountUniqueId,
                 ]);
 
                 // Retry dengan awalan '+' jika belum ada
@@ -601,11 +608,13 @@ class ScalevWebhookController extends Controller
                         Log::channel('whatsapp')->info('WA order.created sent via Whapify after + retry', [
                             'phone' => $targetPlus,
                             'http' => $resp2->status(),
+                            'account' => $cfg->AccountUniqueId,
                         ]);
                     } else {
                         Log::channel('whatsapp')->warning('WA order.created failed after + retry via Whapify', [
                             'status' => $resp2->status(),
                             'body' => $resp2->body(),
+                            'account' => $cfg->AccountUniqueId,
                         ]);
                     }
                 }
@@ -613,6 +622,7 @@ class ScalevWebhookController extends Controller
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->warning('WA order.created exception via Whapify', [
                 'error' => $e->getMessage(),
+                'account' => $cfg->AccountUniqueId ?? null,
             ]);
         }
     }
@@ -707,10 +717,15 @@ class ScalevWebhookController extends Controller
 
         // Kirim via Whapify API (multipart/form-data)
         try {
+            $maskedSecret = strlen((string)$cfg->ApiSecret) > 8
+                ? substr($cfg->ApiSecret, 0, 6) . '•••' . substr($cfg->ApiSecret, -2)
+                : '•••';
             Log::channel('whatsapp')->info('Attempting WA payment_status_changed via Whapify', [
                 'phone' => $target,
                 'license' => $licenseKey,
                 'version' => $installerVersion,
+                'account' => $cfg->AccountUniqueId,
+                'secret_masked' => $maskedSecret,
             ]);
 
             $multipart = [
@@ -734,11 +749,13 @@ class ScalevWebhookController extends Controller
                     'phone' => $target,
                     'license' => $licenseKey,
                     'http' => $resp->status(),
+                    'account' => $cfg->AccountUniqueId,
                 ]);
             } else {
                 Log::channel('whatsapp')->warning('WA payment_status_changed send failed via Whapify', [
                     'status' => $resp->status(),
                     'body' => $resp->body(),
+                    'account' => $cfg->AccountUniqueId,
                 ]);
 
                 // Retry with '+' prefix if not already present
@@ -760,11 +777,13 @@ class ScalevWebhookController extends Controller
                             'phone' => $targetPlus,
                             'license' => $licenseKey,
                             'http' => $resp2->status(),
+                            'account' => $cfg->AccountUniqueId,
                         ]);
                     } else {
                         Log::channel('whatsapp')->warning('WA payment_status_changed failed after + retry via Whapify', [
                             'status' => $resp2->status(),
                             'body' => $resp2->body(),
+                            'account' => $cfg->AccountUniqueId,
                         ]);
                     }
                 }
@@ -772,6 +791,7 @@ class ScalevWebhookController extends Controller
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->warning('WA payment_status_changed exception via Whapify', [
                 'error' => $e->getMessage(),
+                'account' => $cfg->AccountUniqueId ?? null,
             ]);
         }
     }

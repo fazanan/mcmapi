@@ -1106,10 +1106,14 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
             } elseif (!$target) {
                 $result = ['ok'=>false,'status'=>0,'body'=>'Phone kosong atau tidak valid.'];
             } else {
-                Log::channel('whatsapp')->info('Test WA page: Attempting send via Whapify', ['recipient'=>$target]);
+                $maskedSecret = strlen((string)$secret) > 8 ? substr($secret,0,6).'•••'.substr($secret,-2) : '•••';
+                Log::channel('whatsapp')->info('Test WA page: Attempting send via Whapify', [
+                    'recipient'=>$target,
+                    'account'=>$account,
+                    'secret_masked'=>$maskedSecret,
+                ]);
                 // Bangun preview cURL (masking secret) untuk membantu debugging.
                 // Kirim sebagai multipart persis seperti Postman/cURL: gunakan asMultipart()
-                $maskedSecret = strlen((string)$secret) > 8 ? substr($secret,0,6).'•••'.substr($secret,-2) : '•••';
                 $curlPreview = 'curl -X POST "https://whapify.id/api/send/whatsapp" -H "Content-Type: multipart/form-data" -F "secret='.$maskedSecret.'" -F "account='.$account.'" -F "recipient='.$target.'" -F "type=text" -F "message='.$message.'"';
                 $resp = \Illuminate\Support\Facades\Http::timeout(20)
                     ->asMultipart()
