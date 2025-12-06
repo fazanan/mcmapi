@@ -245,10 +245,16 @@ class ScalevWebhookController extends Controller
             else { $edition = (string)($data['edition'] ?? 'Basic'); }
         }
 
-        // 2) Hitung tenor hari dari pola "Akses X bulan" => X*30 hari
+        // 2) Hitung tenor dari nama produk:
+        //    - "Akses X hari"  => tenor = X hari
+        //    - "Akses X bulan" => tenor = X*30 hari
+        //    Default tetap 180 hari bila tidak ditemukan pola
         $validityDays = 180;
-        if (preg_match('/Akses\s+(\d+)\s+bulan/i', $rawProduct, $tm)) {
-            $months = (int)$tm[1];
+        if (preg_match('/Akses\s+(\d+)\s+hari/i', $rawProduct, $tmHari)) {
+            $days = (int)$tmHari[1];
+            if ($days > 0) { $validityDays = $days; }
+        } elseif (preg_match('/Akses\s+(\d+)\s+bulan/i', $rawProduct, $tmBulan)) {
+            $months = (int)$tmBulan[1];
             if ($months > 0) { $validityDays = $months * 30; }
         }
         $expires = now('UTC')->addDays((int)$validityDays);
