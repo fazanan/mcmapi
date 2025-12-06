@@ -749,11 +749,28 @@ class ScalevWebhookController extends Controller
             ];
 
             $resp = Http::timeout(20)
-                ->withOptions(['multipart' => $multipart])
-                ->post('https://whapify.id/api/send/whatsapp');
+                ->asMultipart()
+                ->post('https://whapify.id/api/send/whatsapp', [
+                    'secret' => $cfg->ApiSecret,
+                    'account' => $cfg->AccountUniqueId,
+                    'accountUniqueId' => $cfg->AccountUniqueId,
+                    'recipient' => $target,
+                    'type' => 'text',
+                    'message' => $message,
+                    'text' => $message,
+                ]);
 
-            // Treat any 2xx as success (Whapify may return 201 Created)
-            if ($resp->successful()) {
+            // Evaluasi seperti test page: cek HTTP dan body JSON
+            $bodyText = $resp->body();
+            $json = null; try { $json = json_decode($bodyText, true, 512, JSON_THROW_ON_ERROR); } catch (\Throwable $e) { $json = null; }
+            $logicalOk = $resp->ok();
+            $logicalStatus = $resp->status();
+            if (is_array($json)) {
+                if (isset($json['status']) && is_numeric($json['status'])) { $logicalStatus = (int)$json['status']; }
+                if (array_key_exists('data', $json)) { $logicalOk = $logicalOk && (bool)$json['data']; }
+            }
+
+            if ($logicalOk && $logicalStatus === 200) {
                 Log::channel('whatsapp')->info('WA payment_status_changed sent via Whapify', [
                     'phone' => $target,
                     'license' => $licenseKey,
@@ -763,7 +780,8 @@ class ScalevWebhookController extends Controller
             } else {
                 Log::channel('whatsapp')->warning('WA payment_status_changed send failed via Whapify', [
                     'status' => $resp->status(),
-                    'body' => $resp->body(),
+                    'json_status' => is_array($json) ? ($json['status'] ?? null) : null,
+                    'body' => $bodyText,
                     'account' => $cfg->AccountUniqueId,
                 ]);
 
@@ -780,8 +798,27 @@ class ScalevWebhookController extends Controller
                         ['name' => 'text', 'contents' => $message],
                     ];
 
-                    $resp2 = Http::asMultipart()->post('https://whapify.id/api/send/whatsapp', $multipartPlus);
-                    if ($resp2->successful()) {
+                    $resp2 = Http::timeout(20)
+                        ->asMultipart()
+                        ->post('https://whapify.id/api/send/whatsapp', [
+                            'secret' => $cfg->ApiSecret,
+                            'account' => $cfg->AccountUniqueId,
+                            'accountUniqueId' => $cfg->AccountUniqueId,
+                            'recipient' => $targetPlus,
+                            'type' => 'text',
+                            'message' => $message,
+                            'text' => $message,
+                        ]);
+
+                    $bodyText2 = $resp2->body();
+                    $json2 = null; try { $json2 = json_decode($bodyText2, true, 512, JSON_THROW_ON_ERROR); } catch (\Throwable $e) { $json2 = null; }
+                    $logicalOk2 = $resp2->ok();
+                    $logicalStatus2 = $resp2->status();
+                    if (is_array($json2)) {
+                        if (isset($json2['status']) && is_numeric($json2['status'])) { $logicalStatus2 = (int)$json2['status']; }
+                        if (array_key_exists('data', $json2)) { $logicalOk2 = $logicalOk2 && (bool)$json2['data']; }
+                    }
+                    if ($logicalOk2 && $logicalStatus2 === 200) {
                         Log::channel('whatsapp')->info('WA payment_status_changed sent via Whapify after + retry', [
                             'phone' => $targetPlus,
                             'license' => $licenseKey,
@@ -791,7 +828,8 @@ class ScalevWebhookController extends Controller
                     } else {
                         Log::channel('whatsapp')->warning('WA payment_status_changed failed after + retry via Whapify', [
                             'status' => $resp2->status(),
-                            'body' => $resp2->body(),
+                            'json_status' => is_array($json2) ? ($json2['status'] ?? null) : null,
+                            'body' => $bodyText2,
                             'account' => $cfg->AccountUniqueId,
                         ]);
                     }
