@@ -563,7 +563,7 @@ class ScalevWebhookController extends Controller
             // Kirim sebagai multipart/form-data ke Whapify
             $multipart = [
                 ['name' => 'secret', 'contents' => $cfg->ApiSecret],
-                // Sertakan kedua field account untuk kompatibilitas
+                // Sertakan kedua field account untuk kompatibilitas variasi Whapify
                 ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
                 ['name' => 'accountUniqueId', 'contents' => $cfg->AccountUniqueId],
                 ['name' => 'recipient', 'contents' => $target],
@@ -603,7 +603,9 @@ class ScalevWebhookController extends Controller
                         ['name' => 'text', 'contents' => $message],
                     ];
 
-                    $resp2 = Http::asMultipart()->post('https://whapify.id/api/send/whatsapp', $multipartPlus);
+                    $resp2 = Http::timeout(20)
+                        ->withOptions(['multipart' => $multipartPlus])
+                        ->post('https://whapify.id/api/send/whatsapp');
                     if ($resp2->successful()) {
                         Log::channel('whatsapp')->info('WA order.created sent via Whapify after + retry', [
                             'phone' => $targetPlus,
