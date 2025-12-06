@@ -52,9 +52,10 @@ class ScalevWebhookController extends Controller
         $statusFrom = null;
         if (!empty($data['payment_status_history']) && is_array($data['payment_status_history'])) {
             $hist = $data['payment_status_history'];
-            if (count($hist) >= 1) { $statusFrom = strtolower((string)($hist[0]['status'] ?? '')); }
+            // Ambil status sebelumnya dari entry terakhir di riwayat
+            if (count($hist) >= 1) { $statusFrom = strtolower((string)($hist[count($hist)-1]['status'] ?? '')); }
         } else {
-            // Avoid undefined array key notice when 'unpaid_time' is absent
+            // Fallback: jika ada unpaid_time, anggap sebelumnya 'unpaid'
             $statusFrom = (isset($data['unpaid_time']) && !empty($data['unpaid_time'])) ? 'unpaid' : '';
         }
 
@@ -375,7 +376,7 @@ class ScalevWebhookController extends Controller
 
         // Kirim WhatsApp berisi data license setelah payment status berubah (paid)
         try {
-            if ($event === 'order.payment_status_changed') {
+            if ($event === 'order.payment_status_changed' && $to === 'paid') {
                 $this->sendWhatsappPaymentStatusChanged(
                     $orderId,
                     $orderPhone ?? $phone,
