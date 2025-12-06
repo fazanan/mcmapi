@@ -708,6 +708,34 @@ class ScalevWebhookController extends Controller
                     'status' => $resp->status(),
                     'body' => $resp->body(),
                 ]);
+
+                // Retry with '+' prefix if not already present
+                if (strpos($target, '+') !== 0) {
+                    $targetPlus = '+' . $target;
+                    $multipartPlus = [
+                        ['name' => 'secret', 'contents' => $cfg->ApiSecret],
+                        ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
+                        ['name' => 'accountUniqueId', 'contents' => $cfg->AccountUniqueId],
+                        ['name' => 'recipient', 'contents' => $targetPlus],
+                        ['name' => 'type', 'contents' => 'text'],
+                        ['name' => 'message', 'contents' => $message],
+                        ['name' => 'text', 'contents' => $message],
+                    ];
+
+                    $resp2 = Http::asMultipart()->post('https://whapify.id/api/send/whatsapp', $multipartPlus);
+                    if ($resp2->successful()) {
+                        Log::channel('whatsapp')->info('WA payment_status_changed sent via Whapify after + retry', [
+                            'phone' => $targetPlus,
+                            'license' => $licenseKey,
+                            'http' => $resp2->status(),
+                        ]);
+                    } else {
+                        Log::channel('whatsapp')->warning('WA payment_status_changed failed after + retry via Whapify', [
+                            'status' => $resp2->status(),
+                            'body' => $resp2->body(),
+                        ]);
+                    }
+                }
             }
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->warning('WA payment_status_changed exception via Whapify', [
