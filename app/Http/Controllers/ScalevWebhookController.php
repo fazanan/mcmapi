@@ -52,10 +52,16 @@ class ScalevWebhookController extends Controller
         $statusFrom = null;
         if (!empty($data['payment_status_history']) && is_array($data['payment_status_history'])) {
             $hist = $data['payment_status_history'];
-            // Ambil status sebelumnya dari entry terakhir di riwayat
-            if (count($hist) >= 1) { $statusFrom = strtolower((string)($hist[count($hist)-1]['status'] ?? '')); }
-        } else {
-            // Fallback: jika ada unpaid_time, anggap sebelumnya 'unpaid'
+            $count = count($hist);
+            // Ambil status SEBELUM yang terbaru: index count-2 jika ada, kalau hanya satu entry gunakan entry tersebut
+            if ($count >= 2) {
+                $statusFrom = strtolower((string)($hist[$count - 2]['status'] ?? ''));
+            } elseif ($count === 1) {
+                $statusFrom = strtolower((string)($hist[0]['status'] ?? ''));
+            }
+        }
+        // Fallback: jika masih kosong dan ada unpaid_time, anggap sebelumnya 'unpaid'
+        if ($statusFrom === null || $statusFrom === '') {
             $statusFrom = (isset($data['unpaid_time']) && !empty($data['unpaid_time'])) ? 'unpaid' : '';
         }
 
@@ -65,6 +71,12 @@ class ScalevWebhookController extends Controller
         // Accept various not-paid labels and determine if we have a not-paid -> paid transition
         $notPaidLabels = ['not_paid', 'unpaid', 'pending'];
         $isPaidTransition = in_array($from, $notPaidLabels, true) && $to === 'paid';
+        Log::info('ScaleV payment transition', [
+            'event' => $event,
+            'from' => $from,
+            'to' => $to,
+            'isPaidTransition' => $isPaidTransition,
+        ]);
 
         // Extract customer info from destination_address or fallback
         $dest = $data['destination_address'] ?? [];

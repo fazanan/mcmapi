@@ -1114,12 +1114,13 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
                 ]);
                 // Bangun preview cURL (masking secret) untuk membantu debugging.
                 // Kirim sebagai multipart persis seperti Postman/cURL: gunakan asMultipart()
-                $curlPreview = 'curl -X POST "https://whapify.id/api/send/whatsapp" -H "Content-Type: multipart/form-data" -F "secret='.$maskedSecret.'" -F "account='.$account.'" -F "recipient='.$target.'" -F "type=text" -F "message='.$message.'"';
+                $curlPreview = 'curl -X POST "https://whapify.id/api/send/whatsapp" -H "Content-Type: multipart/form-data" -F "secret='.$maskedSecret.'" -F "account='.$account.'" -F "accountUniqueId='.$account.'" -F "recipient='.$target.'" -F "type=text" -F "message='.$message.'" -F "text='.$message.'"';
                 $resp = \Illuminate\Support\Facades\Http::timeout(20)
                     ->asMultipart()
                     ->post('https://whapify.id/api/send/whatsapp', [
                         'secret' => $secret,
                         'account' => $account,
+                        'accountUniqueId' => $account,
                         'recipient' => $target,
                         'type' => 'text',
                         'message' => $message,
@@ -1137,12 +1138,13 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
                     if (array_key_exists('data', $json)) { $logicalOk = $logicalOk && (bool)$json['data']; }
                 }
 
-                if ($resp->successful()) {
-                    Log::channel('whatsapp')->info('Test WA page: Sent via Whapify', ['recipient'=>$target, 'http'=>$resp->status()]);
-                    $result = ['ok'=>true,'status'=>$resp->status(),'body'=>$bodyText];
+                if ($logicalOk && $logicalStatus === 200) {
+                    Log::channel('whatsapp')->info('Test WA page: Sent via Whapify', ['recipient'=>$target, 'http'=>$resp->status(), 'json_status'=>$logicalStatus]);
+                    $result = ['ok'=>true,'status'=>200,'body'=>$bodyText];
                 } else {
                     Log::channel('whatsapp')->warning('Test WA page: Failed via Whapify', [
                         'http'=>$resp->status(),
+                        'json_status'=>is_array($json) ? ($json['status'] ?? null) : null,
                         'body'=>$bodyText,
                     ]);
                     // Retry dengan awalan '+' jika belum ada
@@ -1154,9 +1156,11 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
                             ->post('https://whapify.id/api/send/whatsapp', [
                                 'secret' => $secret,
                                 'account' => $account,
+                                'accountUniqueId' => $account,
                                 'recipient' => $targetPlus,
                                 'type' => 'text',
                                 'message' => $message,
+                                'text' => $message,
                             ]);
                         $bodyText2 = $resp2->body();
                         $json2 = null; try { $json2 = json_decode($bodyText2, true, 512, JSON_THROW_ON_ERROR); } catch (\Throwable $e) { $json2 = null; }
@@ -1169,7 +1173,7 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
                         if ($logicalOk2 && $logicalStatus2 === 200) {
                             Log::channel('whatsapp')->info('Test WA page: Sent after retry', ['recipient'=>$targetPlus, 'http'=>$resp2->status(), 'json_status'=>$logicalStatus2]);
                             $result = ['ok'=>true,'status'=>200,'body'=>$bodyText2];
-                            $curlPreview = 'curl -X POST "https://whapify.id/api/send/whatsapp" \\\n+  -H "Content-Type: multipart/form-data" \\\n+  -F "secret='.$maskedSecret.'" \\\n+  -F "account='.$account.'" \\\n+  -F "recipient='.$targetPlus.'" \\\n+  -F "type=text" \\\n+  -F "message='.$message.'"';
+                            $curlPreview = 'curl -X POST "https://whapify.id/api/send/whatsapp" \\\n+  -H "Content-Type: multipart/form-data" \\\n+  -F "secret='.$maskedSecret.'" \\\n+  -F "account='.$account.'" \\\n+  -F "accountUniqueId='.$account.'" \\\n+  -F "recipient='.$targetPlus.'" \\\n+  -F "type=text" \\\n+  -F "message='.$message.'" \\\n+  -F "text='.$message.'"';
                         } else {
                             Log::channel('whatsapp')->warning('Test WA page: Retry failed', [
                                 'http'=>$resp2->status(),
