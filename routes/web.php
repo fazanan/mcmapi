@@ -1072,20 +1072,25 @@ Route::get('/debug/whatsapp-log', function () {
     return response()->json(['ok' => true, 'message' => 'whatsapp.log should have a new entry']);
 });
 
-// Halaman Test WhatsApp: form sederhana untuk kirim pesan via DripSender dan tampilkan hasil + tail log
+// Halaman Test WhatsApp: form sederhana untuk kirim pesan via Whapify dan tampilkan hasil + tail log
 Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
     $result = null;
     $phone = trim((string)($request->input('phone') ?? $request->input('recipient')));
     $message = (string)($request->input('message') ?? 'Halo, ini test kiriman WhatsApp dari halaman admin.');
     $overrideApiKey = $request->input('api_key');
+    $overrideSecret = $request->input('secret');
+    $overrideAccount = $request->input('account');
     $curlPreview = null;
 
     // Ambil config WhatsApp terbaru
     $cfg = DB::table('WhatsAppConfig')->orderByDesc('UpdatedAt')->orderByDesc('Id')->first();
-    $apiKey = $overrideApiKey ?: ($cfg->ApiSecret ?? null);
+    $secret = $overrideSecret ?: ($cfg->ApiSecret ?? null);
+    $account = $overrideAccount ?: ($cfg->AccountUniqueId ?? null);
 
     $statusCfg = [
-        'hasApiKey' => !empty($apiKey),
+        'hasSecret' => !empty($secret),
+        'hasAccount' => !empty($account),
+        'hasApiKey' => false,
     ];
 
     if ($request->isMethod('post')) {
@@ -1096,21 +1101,25 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
             if (preg_match('/^0\d+$/', $target)) { $target = '62'.substr($target,1); }
             if (preg_match('/^\+62\d+$/', $target)) { $target = substr($target,1); }
 
-            if (!$apiKey) {
-                $result = ['ok'=>false,'status'=>0,'body'=>'API key DripSender tidak terisi (isi api_key atau set WhatsAppConfig.ApiSecret).'];
+            if (!$secret || !$account) {
+                $result = ['ok'=>false,'status'=>0,'body'=>'Secret/Account Whapify tidak terisi (isi secret & account di form atau set di WhatsAppConfig).'];
             } elseif (!$target) {
                 $result = ['ok'=>false,'status'=>0,'body'=>'Phone kosong atau tidak valid.'];
             } else {
-                Log::channel('whatsapp')->info('Test WA page: Attempting send via DripSender', ['phone'=>$target]);
-                // Bangun preview cURL (masking api_key) untuk membantu debugging.
-                $maskedKey = strlen((string)$apiKey) > 8 ? substr($apiKey,0,6).'•••'.substr($apiKey,-2) : '•••';
-                $curlPreview = 'curl -X POST "https://api.dripsender.id/send" \\\n+   -H "Content-Type: application/json" \\\n+   -d "{\\"api_key\\":\\"'.$maskedKey.'\\",\\"text\\":\\"'.$message.'\\",\\"phone\\":\\"'.$target.'\\"}"';
+                Log::channel('whatsapp')->info('Test WA page: Attempting send via Whapify', ['recipient'=>$target]);
+                // Bangun preview cURL (masking secret) untuk membantu debugging.
                 // Kirim sebagai multipart persis seperti Postman/cURL: gunakan asMultipart()
+                $maskedSecret = strlen((string)$secret) > 8 ? substr($secret,0,6).'•••'.substr($secret,-2) : '•••';
+                $curlPreview = 'curl -X POST "https://whapify.id/api/send/whatsapp" -H "Content-Type: multipart/form-data" -F "secret='.$maskedSecret.'" -F "account='.$account.'" -F "recipient='.$target.'" -F "type=text" -F "message='.$message.'"';
                 $resp = \Illuminate\Support\Facades\Http::timeout(20)
-                    ->post('https://api.dripsender.id/send', [
-                        'api_key' => $apiKey,
+                    ->asMultipart()
+                    ->post('https://whapify.id/api/send/whatsapp', [
+                        'secret' => $secret,
+                        'account' => $account,
+                        'recipient' => $target,
+                        'type' => 'text',
+                        'message' => $message,
                         'text' => $message,
-                        'phone' => $target,
                     ]);
 
                 // Terkadang API mengembalikan HTTP 200 tetapi body JSON menyatakan gagal (status!=200/data=false).
@@ -1124,17 +1133,16 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
                     if (array_key_exists('data', $json)) { $logicalOk = $logicalOk && (bool)$json['data']; }
                 }
 
-                if ($logicalOk && $logicalStatus === 200) {
-                    Log::channel('whatsapp')->info('Test WA page: Sent via DripSender', ['phone'=>$target, 'http'=>$resp->status(), 'json_status'=>$logicalStatus]);
-                    $result = ['ok'=>true,'status'=>200,'body'=>$bodyText];
+                if ($resp->successful()) {
+                    Log::channel('whatsapp')->info('Test WA page: Sent via Whapify', ['recipient'=>$target, 'http'=>$resp->status()]);
+                    $result = ['ok'=>true,'status'=>$resp->status(),'body'=>$bodyText];
                 } else {
-                    Log::channel('whatsapp')->warning('Test WA page: Failed via DripSender', [
+                    Log::channel('whatsapp')->warning('Test WA page: Failed via Whapify', [
                         'http'=>$resp->status(),
-                        'json_status'=>is_array($json) ? ($json['status'] ?? ($json['success'] ?? null)) : null,
                         'body'=>$bodyText,
                     ]);
-                    // Fallback retry di-nonaktifkan untuk DripSender
-                    if (false) {
+                    // Retry dengan awalan '+' jika belum ada
+                    if (strpos($target, '+') !== 0) {
                         $targetPlus = '+' . $target;
                         Log::channel('whatsapp')->info('Test WA page: Retry with plus prefix', ['recipient'=>$targetPlus]);
                         $resp2 = \Illuminate\Support\Facades\Http::timeout(20)
@@ -1192,9 +1200,9 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
         'recipient' => $phone,
         'message' => $message,
         'statusCfg' => $statusCfg,
-        'overrideSecret' => null,
-        'overrideAccount' => null,
-        'overrideApiKey' => $overrideApiKey,
+        'overrideSecret' => $overrideSecret,
+        'overrideAccount' => $overrideAccount,
+        'overrideApiKey' => null,
         'logTail' => $logTail,
         'curlPreview' => $curlPreview,
     ]);
