@@ -514,8 +514,8 @@ class ScalevWebhookController extends Controller
             ->orderByDesc('Id')
             ->first();
 
-        if (!$cfg || empty($cfg->ApiSecret)) {
-            Log::channel('whatsapp')->info('WA order.created not sent: missing ApiSecret (DripSender api_key) in WhatsAppConfig');
+        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+            Log::channel('whatsapp')->info('WA order.created not sent: missing ApiSecret/AccountUniqueId in WhatsAppConfig');
             return;
         }
 
@@ -558,25 +558,57 @@ class ScalevWebhookController extends Controller
             // Kirim sebagai multipart/form-data ke Whapify
             $multipart = [
                 ['name' => 'secret', 'contents' => $cfg->ApiSecret],
+                // Sertakan kedua field account untuk kompatibilitas
                 ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
+                ['name' => 'accountUniqueId', 'contents' => $cfg->AccountUniqueId],
                 ['name' => 'recipient', 'contents' => $target],
                 ['name' => 'type', 'contents' => 'text'],
                 ['name' => 'message', 'contents' => $message],
+                ['name' => 'text', 'contents' => $message],
             ];
 
             $resp = Http::timeout(20)
                 ->withOptions(['multipart' => $multipart])
                 ->post('https://whapify.id/api/send/whatsapp');
 
-            if ($resp->ok()) {
+            // Anggap semua 2xx sebagai sukses
+            if ($resp->successful()) {
                 Log::channel('whatsapp')->info('WA order.created sent via Whapify', [
                     'phone' => $target,
+                    'http' => $resp->status(),
                 ]);
             } else {
                 Log::channel('whatsapp')->warning('WA order.created send failed via Whapify', [
                     'status' => $resp->status(),
                     'body' => $resp->body(),
                 ]);
+
+                // Retry dengan awalan '+' jika belum ada
+                if (strpos($target, '+') !== 0) {
+                    $targetPlus = '+' . $target;
+                    $multipartPlus = [
+                        ['name' => 'secret', 'contents' => $cfg->ApiSecret],
+                        ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
+                        ['name' => 'accountUniqueId', 'contents' => $cfg->AccountUniqueId],
+                        ['name' => 'recipient', 'contents' => $targetPlus],
+                        ['name' => 'type', 'contents' => 'text'],
+                        ['name' => 'message', 'contents' => $message],
+                        ['name' => 'text', 'contents' => $message],
+                    ];
+
+                    $resp2 = Http::asMultipart()->post('https://whapify.id/api/send/whatsapp', $multipartPlus);
+                    if ($resp2->successful()) {
+                        Log::channel('whatsapp')->info('WA order.created sent via Whapify after + retry', [
+                            'phone' => $targetPlus,
+                            'http' => $resp2->status(),
+                        ]);
+                    } else {
+                        Log::channel('whatsapp')->warning('WA order.created failed after + retry via Whapify', [
+                            'status' => $resp2->status(),
+                            'body' => $resp2->body(),
+                        ]);
+                    }
+                }
             }
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->warning('WA order.created exception via Whapify', [
