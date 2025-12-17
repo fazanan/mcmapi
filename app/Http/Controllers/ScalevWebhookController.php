@@ -207,21 +207,89 @@ class ScalevWebhookController extends Controller
 
         if (!$isPaidTransition) {
             // Untuk event non-paid, tetap log/save order row.
-            // Jika event adalah order.created, kirim WhatsApp reminder pembayaran.
-            try {
-                if ($event === 'order.created' && !empty($phone)) {
-                    $this->sendWhatsappOrderCreated(
+
+            // LOGIC KHUSUS: "Akses 3 Hari" pada saat order.created
+            // Jika produk adalah Akses 3 Hari, cek kuota (duplikasi email/hp).
+            // Jika sudah ada: kirim WA "quota habis".
+            // Jika belum ada: generate license (status Not Paid), kirim WA data license.
+            $isFreeAccess = $productName && (stripos($productName, 'Akses 3 Hari') !== false || stripos($productName, 'Akses Gratis') !== false);
+            
+            if ($event === 'order.created' && $isFreeAccess && !empty($phone)) {
+                // Cek duplikasi di table license
+                $exists = CustomerLicense::where(function($q) use ($email, $phone) {
+                    if ($email) $q->where('email', $email);
+                    if ($phone) $q->orWhere('phone', $phone);
+                })->exists();
+
+                if ($exists) {
+                    // Kirim WA: License gratis sudah habis
+                    $this->sendWhatsappFreeQuotaExceeded($phone, $name);
+                } else {
+                    // Generate License (Status: Not Paid)
+                    // Logic mirip dengan paid transition, tapi disederhanakan untuk case ini
+                    $newKey = 'MCM-' . Str::upper(Str::random(8));
+                    // Hitung tenor: default 3 hari untuk Akses 3 Hari
+                    $validityDays = 3; 
+                    if (preg_match('/Akses\s+(\d+)\s+hari/i', $productName, $tmHari)) {
+                        $days = (int)$tmHari[1];
+                        if ($days > 0) { $validityDays = $days; }
+                    }
+                    $expires = now('UTC')->addDays($validityDays);
+                    $featuresJson = json_encode(['Batch','TextOverlay']); // Default features
+                    
+                    // Edition heuristic
+                    $edition = 'Basic';
+                    $pnameLc = strtolower($productName);
+                    if (str_contains($pnameLc, 'pro')) { $edition = 'Pro'; }
+                    
+                    // Create License
+                    $lic = CustomerLicense::create([
+                        'order_id' => $orderId,
+                        'license_key' => $newKey,
+                        'owner' => $name ?: 'Member',
+                        'email' => $email,
+                        'phone' => $phone,
+                        'edition' => $edition,
+                        'payment_status' => 'Not Paid', // Sesuai request
+                        'product_name' => $productName,
+                        'tenor_days' => $validityDays,
+                        'expires_at_utc' => $expires,
+                        'max_seats' => 1,
+                        'features' => $featuresJson,
+                        'max_video' => 2147483647,
+                        'vo_seconds_remaining' => 100000,
+                        'status' => 'InActive',
+                    ]);
+                    
+                    DB::table('license_actions')->insert([
+                        'license_key' => $lic->license_key,
+                        'order_id' => $lic->order_id,
+                        'email' => $email,
+                        'action' => 'Generate',
+                        'result' => 'Success',
+                        'message' => 'License (Free/Not Paid) generated for order.created.',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                    // Kirim WA Data License
+                    $this->sendWhatsappPaymentStatusChanged(
+                        $orderId,
                         $phone,
                         $name,
-                        $productName,
-                        $variantPrice ?? $netRevenue
+                        $email,
+                        $newKey
                     );
                 }
-            } catch (\Throwable $e) {
-                Log::channel('whatsapp')->warning('Gagal mengirim WhatsApp order.created', [
-                    'error' => $e->getMessage(),
-                    'order_id' => $orderId,
-                ]);
+
+            } elseif ($event === 'order.created' && !empty($phone)) {
+                // Normal behavior for other products (Payment Reminder)
+                $this->sendWhatsappOrderCreated(
+                    $phone,
+                    $name,
+                    $productName,
+                    $variantPrice ?? $netRevenue
+                );
             }
 
             return response()->json([
@@ -435,6 +503,52 @@ class ScalevWebhookController extends Controller
             // Return temporary password only when newly created
             'temporary_password' => $created ? $plainPassword : null,
         ], 200);
+    }
+
+    /**
+     * Kirim WhatsApp jika quota license gratis (Akses 3 Hari) sudah habis.
+     */
+    private function sendWhatsappFreeQuotaExceeded(string $phone, ?string $name): void
+    {
+        $cfg = DB::table('WhatsAppConfig')
+            ->orderByDesc('UpdatedAt')
+            ->orderByDesc('Id')
+            ->first();
+
+        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+            Log::channel('whatsapp')->info('WA quota exceeded not sent: missing ApiSecret/AccountUniqueId');
+            return;
+        }
+
+        $target = preg_replace('/\s+/', '', $phone);
+        $target = preg_replace('/[^0-9+]/', '', $target);
+        if (preg_match('/^0\d+$/', $target)) {
+            $target = '62' . substr($target, 1);
+        }
+        if (!$target) return;
+
+        $safeName = $name ?: 'Kak';
+        $message = "Halo kak {$safeName},\n\n" .
+            "Mohon maaf, jatah license gratis (Akses 3 Hari) kakak sudah habis.\n\n" .
+            "Silakan upgrade ke paket berbayar untuk menikmati fitur lengkap Mesin Cuan Maximal.\n\n" .
+            "Terimakasih.";
+
+        try {
+            $multipart = [
+                ['name' => 'secret', 'contents' => $cfg->ApiSecret],
+                ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
+                ['name' => 'recipient', 'contents' => $target],
+                ['name' => 'type', 'contents' => 'text'],
+                ['name' => 'message', 'contents' => $message],
+            ];
+            Http::timeout(20)
+                ->withOptions(['multipart' => $multipart])
+                ->post('https://whapify.id/api/send/whatsapp');
+            
+            Log::channel('whatsapp')->info('WA quota exceeded sent', ['phone' => $target]);
+        } catch (\Throwable $e) {
+            Log::channel('whatsapp')->warning('WA quota exceeded exception', ['error' => $e->getMessage()]);
+        }
     }
 
     /**
