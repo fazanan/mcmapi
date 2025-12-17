@@ -215,7 +215,16 @@ class ScalevWebhookController extends Controller
             $isFreeAccess = $productName && (stripos($productName, 'Akses 3 Hari') !== false || stripos($productName, 'Akses Gratis') !== false);
             
             if ($event === 'order.created' && $isFreeAccess && !empty($phone)) {
-                // Cek duplikasi di table license
+                // 1) Cek apakah license SUDAH ADA untuk order_id ini (Idempotency)
+                // Jika sudah ada, berarti ini adalah retry webhook. Jangan insert ulang.
+                $alreadyProcessed = CustomerLicense::where('order_id', $orderId)->first();
+                if ($alreadyProcessed) {
+                    // Cukup return OK
+                    return response()->json(['ok' => true, 'result' => 'already_processed', 'order_id' => $orderId], 200);
+                }
+
+                // 2) Cek duplikasi User (Anti-Abuse)
+                // Hanya jika belum pernah ada license untuk order ini, kita cek apakah user ini sudah pernah dapat license sebelumnya.
                 $exists = CustomerLicense::where(function($q) use ($email, $phone) {
                     if ($email) $q->where('email', $email);
                     if ($phone) $q->orWhere('phone', $phone);
