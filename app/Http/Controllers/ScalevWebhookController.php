@@ -181,10 +181,14 @@ class ScalevWebhookController extends Controller
         } else {
             // Saat status sudah menjadi paid, jangan kosongkan kolom lain: hanya update Status dan UpdatedAt
             if ($to === 'paid') {
-                DB::table('OrderData')->where('OrderId', $orderId)->update([
+                $updatePaid = [
                     'Status' => $statusText,
                     'UpdatedAt' => $now,
-                ]);
+                ];
+                if ($productName !== null) {
+                    $updatePaid['ProductName'] = $productName;
+                }
+                DB::table('OrderData')->where('OrderId', $orderId)->update($updatePaid);
             } else {
                 // Untuk event non-paid, update hanya kolom yang ada nilainya agar tidak menimpa dengan null
                 $update = [
@@ -467,6 +471,9 @@ class ScalevWebhookController extends Controller
         // Ambil detail license & pembelian
         $licenseKey = $lic ? ($lic->license_key ?? '') : '';
         $productName = $orderRow ? ($orderRow->ProductName ?? '') : ($lic ? ($lic->product_name ?? '') : '');
+        if ($productName) {
+            $productName = preg_replace('/Akses\s+Gratis/i', 'Akses 3 Hari', (string)$productName);
+        }
         $tenorDays = $lic ? ((int)($lic->tenor_days ?? 0)) : 0;
         $expiresAt = $lic && !empty($lic->expires_at_utc) ? Carbon::parse($lic->expires_at_utc)->setTimezone('Asia/Jakarta')->format('d-m-Y H:i') : null;
         $price = $orderRow ? ($orderRow->VariantPrice ?? null) : null;
@@ -691,7 +698,7 @@ class ScalevWebhookController extends Controller
                 $productNameCandidate = (string)$licRowTmp->product_name;
             }
         }
-        if ($productNameCandidate && stripos($productNameCandidate, 'Akses Gratis') !== false) {
+        if ($productNameCandidate && (stripos($productNameCandidate, 'Akses Gratis') !== false || stripos($productNameCandidate, 'Akses 3 Hari') !== false)) {
             $cfg = DB::table('WhatsAppConfig')->where('Id', 2)->first();
             if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
                 $cfg = DB::table('WhatsAppConfig')
@@ -700,10 +707,19 @@ class ScalevWebhookController extends Controller
                     ->first();
             }
         } else {
-            $cfg = DB::table('WhatsAppConfig')
-                ->orderByDesc('UpdatedAt')
-                ->orderByDesc('Id')
-                ->first();
+            // Untuk produk berbayar (Akses 3 Bulan, 6 Bulan, 1 Tahun, Lifetime), gunakan Config ID=1
+            $cfg = DB::table('WhatsAppConfig')->where('Id', 1)->first();
+            // Fallback bila ID=1 tidak ditemukan/rusak: cari yang bukan ID=2, atau ambil terbaru
+            if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+                $cfg = DB::table('WhatsAppConfig')
+                    ->where('Id', '<>', 2)
+                    ->orderByDesc('UpdatedAt')
+                    ->first();
+                // Jika masih kosong, ambil apa saja yang ada
+                if (!$cfg) {
+                    $cfg = DB::table('WhatsAppConfig')->orderByDesc('UpdatedAt')->first();
+                }
+            }
         }
 
         if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
@@ -984,6 +1000,9 @@ class ScalevWebhookController extends Controller
 
         $licenseKey = $lic ? ($lic->license_key ?? '') : '';
         $productName = $orderRow ? ($orderRow->ProductName ?? '') : ($lic ? ($lic->product_name ?? '') : '');
+        if ($productName) {
+            $productName = preg_replace('/Akses\s+Gratis/i', 'Akses 3 Hari', (string)$productName);
+        }
         $tenorDays = $lic ? ((int)($lic->tenor_days ?? 0)) : 0;
         $expiresAt = $lic && !empty($lic->expires_at_utc)
             ? Carbon::parse($lic->expires_at_utc)->setTimezone('Asia/Jakarta')->format('d-m-Y H:i')
