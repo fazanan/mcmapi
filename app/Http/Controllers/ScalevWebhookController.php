@@ -761,9 +761,15 @@ class ScalevWebhookController extends Controller
         $groupLink = $cfg->GroupLink ?? '';
 
         $safeName = $name ?: (strstr($email, '@', true) ?: 'Member');
+        $productLine = '';
+        if (!empty($productNameCandidate)) {
+            $productNormalized = preg_replace('/Akses\s+Gratis/i', 'Akses 3 Hari', (string)$productNameCandidate);
+            $productLine = "Produk: {$productNormalized}\n";
+        }
         $message = "Data License Mesin Cuan Maximal\n\n".
             "Nama: {$safeName}\n".
             "Email: {$email}\n".
+            $productLine .
             "License: {$licenseKey}\n".
             "Version: {$installerVersion}\n".
             "Link Installer:\n\n".
