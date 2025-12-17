@@ -158,6 +158,11 @@ class ScalevWebhookController extends Controller
         $netRevenue = $data['net_revenue'] ?? null;
         $statusText = $to === 'paid' ? 'Paid' : ($request->input('Status') ?? 'Not Paid');
 
+        // Normalisasi nama produk: ubah "Akses Gratis" menjadi "Akses 3 Hari"
+        if ($productName) {
+            $productName = preg_replace('/Akses\s+Gratis/i', 'Akses 3 Hari', (string)$productName);
+        }
+
         $now = Carbon::now();
         $exists = DB::table('OrderData')->where('OrderId', $orderId)->exists();
         if (!$exists) {
@@ -234,6 +239,10 @@ class ScalevWebhookController extends Controller
         // Gunakan Product dari tabel OrderData sebagai sumber utama parsing
         $edition = null;
         $rawProduct = (string)($productFromOrder ?? $productName ?? '');
+        // Pastikan normalisasi juga diterapkan di sini
+        if ($rawProduct !== '') {
+            $rawProduct = preg_replace('/Akses\s+Gratis/i', 'Akses 3 Hari', $rawProduct);
+        }
         if (preg_match('/\s-\s*([^\-\)]+?)\s-\s*/u', $rawProduct, $m)) {
             $edition = trim($m[1]);
         }
@@ -270,7 +279,7 @@ class ScalevWebhookController extends Controller
             $ownerName = $orderName ?: ($ownerSourceEmail ? (strstr($ownerSourceEmail, '@', true) ?: 'Member') : 'Member');
             $finalEmail = $orderEmail ?? $email;
             $finalPhone = $orderPhone ?? $phone;
-            $finalProduct = $productFromOrder ?? $productName;
+            $finalProduct = $rawProduct;
             $lic = CustomerLicense::create([
                 'order_id' => $orderId,
                 'license_key' => $newKey,
@@ -306,7 +315,7 @@ class ScalevWebhookController extends Controller
                 'phone' => ($orderPhone ?? $phone) ?? $lic->phone,
                 'edition' => $lic->edition ?: $edition,
                 'payment_status' => 'paid',
-                'product_name' => ($productFromOrder ?? $productName) ?? $lic->product_name,
+                'product_name' => ($rawProduct ?: $lic->product_name),
                 'tenor_days' => $lic->tenor_days ?: $validityDays,
                 'features' => $lic->features ?: $featuresJson,
                 'status' => $lic->status ?: 'InActive',
@@ -670,11 +679,32 @@ class ScalevWebhookController extends Controller
      */
     private function sendWhatsappPaymentStatusChanged(string $orderId, ?string $phone, string $name, string $email, string $licenseKey): void
     {
-        // Ambil konfigurasi WhatsApp terbaru untuk secret/account + installer data
-        $cfg = DB::table('WhatsAppConfig')
-            ->orderByDesc('UpdatedAt')
-            ->orderByDesc('Id')
-            ->first();
+        $cfg = null;
+        $productNameCandidate = null;
+        $rowForProduct = DB::table('OrderData')->where('OrderId', $orderId)->first();
+        if ($rowForProduct && !empty($rowForProduct->ProductName)) {
+            $productNameCandidate = (string)$rowForProduct->ProductName;
+        }
+        if (!$productNameCandidate && !empty($licenseKey)) {
+            $licRowTmp = \App\Models\CustomerLicense::where('license_key', $licenseKey)->first();
+            if ($licRowTmp && !empty($licRowTmp->product_name)) {
+                $productNameCandidate = (string)$licRowTmp->product_name;
+            }
+        }
+        if ($productNameCandidate && stripos($productNameCandidate, 'Akses Gratis') !== false) {
+            $cfg = DB::table('WhatsAppConfig')->where('Id', 2)->first();
+            if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+                $cfg = DB::table('WhatsAppConfig')
+                    ->orderByDesc('UpdatedAt')
+                    ->orderByDesc('Id')
+                    ->first();
+            }
+        } else {
+            $cfg = DB::table('WhatsAppConfig')
+                ->orderByDesc('UpdatedAt')
+                ->orderByDesc('Id')
+                ->first();
+        }
 
         if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
             Log::channel('whatsapp')->info('WA payment_status_changed not sent: missing ApiSecret/AccountUniqueId in WhatsAppConfig');
@@ -795,6 +825,19 @@ class ScalevWebhookController extends Controller
                     'http' => $resp->status(),
                     'account' => $cfg->AccountUniqueId,
                 ]);
+                // Update delivery status pada license
+                if (!empty($licenseKey)) {
+                    try {
+                        $licRow = \App\Models\CustomerLicense::where('license_key', $licenseKey)->first();
+                        if ($licRow) {
+                            $licRow->delivery_status = 'Terkirim';
+                            $licRow->delivery_log = 'OK http=' . $resp->status() . ' json_status=' . $logicalStatus . ' phone=' . $target . ' at=' . now()->toDateTimeString();
+                            $licRow->save();
+                        }
+                    } catch (\Throwable $e) {
+                        Log::warning('Gagal update delivery status (success)', ['license' => $licenseKey, 'error' => $e->getMessage()]);
+                    }
+                }
             } else {
                 Log::channel('whatsapp')->warning('WA payment_status_changed send failed via Whapify', [
                     'status' => $resp->status(),
@@ -802,6 +845,7 @@ class ScalevWebhookController extends Controller
                     'body' => $bodyText,
                     'account' => $cfg->AccountUniqueId,
                 ]);
+                // Jangan update status gagal dulu; coba retry pakai '+'
 
                 // Retry with '+' prefix if not already present
                 if (strpos($target, '+') !== 0) {
@@ -843,6 +887,19 @@ class ScalevWebhookController extends Controller
                             'http' => $resp2->status(),
                             'account' => $cfg->AccountUniqueId,
                         ]);
+                        // Update delivery status pada license (berhasil setelah retry)
+                        if (!empty($licenseKey)) {
+                            try {
+                                $licRow = \App\Models\CustomerLicense::where('license_key', $licenseKey)->first();
+                                if ($licRow) {
+                                    $licRow->delivery_status = 'Terkirim';
+                                    $licRow->delivery_log = 'OK(after +) http=' . $resp2->status() . ' json_status=' . $logicalStatus2 . ' phone=' . $targetPlus . ' at=' . now()->toDateTimeString();
+                                    $licRow->save();
+                                }
+                            } catch (\Throwable $e) {
+                                Log::warning('Gagal update delivery status (retry success)', ['license' => $licenseKey, 'error' => $e->getMessage()]);
+                            }
+                        }
                     } else {
                         Log::channel('whatsapp')->warning('WA payment_status_changed failed after + retry via Whapify', [
                             'status' => $resp2->status(),
@@ -850,6 +907,34 @@ class ScalevWebhookController extends Controller
                             'body' => $bodyText2,
                             'account' => $cfg->AccountUniqueId,
                         ]);
+                        // Update delivery status pada license (gagal setelah retry)
+                        if (!empty($licenseKey)) {
+                            try {
+                                $licRow = \App\Models\CustomerLicense::where('license_key', $licenseKey)->first();
+                                if ($licRow) {
+                                    $licRow->delivery_status = 'Gagal';
+                                    $licRow->delivery_log = 'FAIL http=' . $resp->status() . ' json_status=' . (is_array($json) ? ($json['status'] ?? null) : 'null') . ' body=' . substr($bodyText,0,500) . ' | RETRY http=' . $resp2->status() . ' json_status=' . (is_array($json2) ? ($json2['status'] ?? null) : 'null') . ' body=' . substr($bodyText2,0,500) . ' at=' . now()->toDateTimeString();
+                                    $licRow->save();
+                                }
+                            } catch (\Throwable $e) {
+                                Log::warning('Gagal update delivery status (retry failed)', ['license' => $licenseKey, 'error' => $e->getMessage()]);
+                            }
+                        }
+                    }
+                }
+                // Jika tidak ada retry (nomor sudah punya +), update sebagai gagal langsung
+                if (strpos($target, '+') === 0) {
+                    if (!empty($licenseKey)) {
+                        try {
+                            $licRow = \App\Models\CustomerLicense::where('license_key', $licenseKey)->first();
+                            if ($licRow) {
+                                $licRow->delivery_status = 'Gagal';
+                                $licRow->delivery_log = 'FAIL http=' . $resp->status() . ' json_status=' . (is_array($json) ? ($json['status'] ?? null) : 'null') . ' body=' . substr($bodyText,0,500) . ' phone=' . $target . ' at=' . now()->toDateTimeString();
+                                $licRow->save();
+                            }
+                        } catch (\Throwable $e) {
+                            Log::warning('Gagal update delivery status (no retry)', ['license' => $licenseKey, 'error' => $e->getMessage()]);
+                        }
                     }
                 }
             }
@@ -858,6 +943,19 @@ class ScalevWebhookController extends Controller
                 'error' => $e->getMessage(),
                 'account' => $cfg->AccountUniqueId ?? null,
             ]);
+            // Update delivery status pada license (exception)
+            if (!empty($licenseKey)) {
+                try {
+                    $licRow = \App\Models\CustomerLicense::where('license_key', $licenseKey)->first();
+                    if ($licRow) {
+                        $licRow->delivery_status = 'Error';
+                        $licRow->delivery_log = 'EXCEPTION ' . $e->getMessage() . ' at=' . now()->toDateTimeString();
+                        $licRow->save();
+                    }
+                } catch (\Throwable $e2) {
+                    Log::warning('Gagal update delivery status (exception)', ['license' => $licenseKey, 'error' => $e2->getMessage()]);
+                }
+            }
         }
     }
 
