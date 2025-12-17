@@ -225,6 +225,9 @@ class ScalevWebhookController extends Controller
                     // Kirim WA: License gratis sudah habis
                     $this->sendWhatsappFreeQuotaExceeded($phone, $name);
                 } else {
+                    // Kirim WA Pre-Notification sebelum license
+                    $this->sendWhatsappFreeAccessPreNotification($phone, $name);
+
                     // Generate License (Status: Not Paid)
                     // Logic mirip dengan paid transition, tapi disederhanakan untuk case ini
                     $newKey = 'MCM-' . Str::upper(Str::random(8));
@@ -506,6 +509,52 @@ class ScalevWebhookController extends Controller
     }
 
     /**
+     * Kirim WhatsApp Intro sebelum mengirim license gratis (Akses 3 Hari).
+     */
+    private function sendWhatsappFreeTrialIntro(string $phone, ?string $name): void
+    {
+        $cfg = DB::table('WhatsAppConfig')
+            ->orderByDesc('UpdatedAt')
+            ->orderByDesc('Id')
+            ->first();
+
+        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+            Log::channel('whatsapp')->info('WA free trial intro not sent: missing ApiSecret/AccountUniqueId');
+            return;
+        }
+
+        $target = preg_replace('/\s+/', '', $phone);
+        $target = preg_replace('/[^0-9+]/', '', $target);
+        if (preg_match('/^0\d+$/', $target)) {
+            $target = '62' . substr($target, 1);
+        }
+        if (!$target) return;
+
+        $safeName = $name ?: 'Kak';
+        $message = "Hi Kak {$safeName}, akses uji coba *GRATIS 3 Hari* Aplikasi MCM (Mesin Cuan Maximal) akan dikirim sesaat lagi.\n\n" .
+            "License harus diaktifkan maximal 1x24 jam jika tidak maka akan expired dan tidak bisa diaktifkan lagi.\n\n" .
+            "Silakan dicoba aplikasinya semoga cocok dan bermanfaat.\n" .
+            "*Admin MCM*";
+
+        try {
+            $multipart = [
+                ['name' => 'secret', 'contents' => $cfg->ApiSecret],
+                ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
+                ['name' => 'recipient', 'contents' => $target],
+                ['name' => 'type', 'contents' => 'text'],
+                ['name' => 'message', 'contents' => $message],
+            ];
+            Http::timeout(20)
+                ->withOptions(['multipart' => $multipart])
+                ->post('https://whapify.id/api/send/whatsapp');
+            
+            Log::channel('whatsapp')->info('WA free trial intro sent', ['phone' => $target]);
+        } catch (\Throwable $e) {
+            Log::channel('whatsapp')->warning('WA free trial intro exception', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
      * Kirim WhatsApp jika quota license gratis (Akses 3 Hari) sudah habis.
      */
     private function sendWhatsappFreeQuotaExceeded(string $phone, ?string $name): void
@@ -548,6 +597,52 @@ class ScalevWebhookController extends Controller
             Log::channel('whatsapp')->info('WA quota exceeded sent', ['phone' => $target]);
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->warning('WA quota exceeded exception', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Kirim WhatsApp Pre-Notification untuk akses gratis 3 hari sebelum license dikirim.
+     */
+    private function sendWhatsappFreeAccessPreNotification(string $phone, ?string $name): void
+    {
+        $cfg = DB::table('WhatsAppConfig')
+            ->orderByDesc('UpdatedAt')
+            ->orderByDesc('Id')
+            ->first();
+
+        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+            Log::channel('whatsapp')->info('WA pre-notification not sent: missing ApiSecret/AccountUniqueId');
+            return;
+        }
+
+        $target = preg_replace('/\s+/', '', $phone);
+        $target = preg_replace('/[^0-9+]/', '', $target);
+        if (preg_match('/^0\d+$/', $target)) {
+            $target = '62' . substr($target, 1);
+        }
+        if (!$target) return;
+
+        $safeName = $name ?: 'Kak';
+        $message = "Hi Kak {$safeName}, akses uji coba *GRATIS 3 Hari* Aplikasi MCM (Mesin Cuan Maximal) akan dikirim sesaat lagi.\n\n" .
+            "*License harus diaktifkan maximal 1x24 jam jika tidak maka akan expired dan tidak bisa diaktifkan lagi*.\n\n" .
+            "Silakan dicoba aplikasinya semoga cocok dan bermanfaat.\n\n" .
+            "*Admin MCM*";
+
+        try {
+            $multipart = [
+                ['name' => 'secret', 'contents' => $cfg->ApiSecret],
+                ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
+                ['name' => 'recipient', 'contents' => $target],
+                ['name' => 'type', 'contents' => 'text'],
+                ['name' => 'message', 'contents' => $message],
+            ];
+            Http::timeout(20)
+                ->withOptions(['multipart' => $multipart])
+                ->post('https://whapify.id/api/send/whatsapp');
+            
+            Log::channel('whatsapp')->info('WA pre-notification sent', ['phone' => $target]);
+        } catch (\Throwable $e) {
+            Log::channel('whatsapp')->warning('WA pre-notification exception', ['error' => $e->getMessage()]);
         }
     }
 
