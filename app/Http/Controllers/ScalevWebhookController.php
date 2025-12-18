@@ -640,9 +640,11 @@ class ScalevWebhookController extends Controller
         if (!$target) return;
 
         $safeName = $name ?: 'Kak';
-        $message = "Hi Kak {$safeName}, akses uji coba *GRATIS 3 Hari* Aplikasi MCM (Mesin Cuan Maximal) akan dikirim sesaat lagi.\n\n" .
-            "*License harus diaktifkan maximal 1x24 jam jika tidak maka akan expired dan tidak bisa diaktifkan lagi*.\n\n" .
-            "Silakan dicoba aplikasinya semoga cocok dan bermanfaat.\n\n" .
+        $message = "Hi Kak *{$safeName}*, akses uji coba *GRATIS 3 Hari Aplikasi MCM (Mesin Cuan Maximal)* akan dikirim sesaat lagi.\n\n" .
+            "*License harus diaktifkan maximal 1x24 jam* jika tidak maka akan expired dan tidak bisa diaktifkan lagi .\n\n" .
+            "Silakan dicoba aplikasinya semoga bermanfaat.\n\n" .
+            "Tanya jawab dan tutorial wajib join Group Whatsapp ini:\n" .
+            "https://bit.ly/4rXPMBn \n\n" .
             "*Admin MCM*";
 
         try {
