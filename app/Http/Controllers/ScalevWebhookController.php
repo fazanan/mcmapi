@@ -237,6 +237,9 @@ class ScalevWebhookController extends Controller
                     // Kirim WA Pre-Notification sebelum license
                     $this->sendWhatsappFreeAccessPreNotification($phone, $name);
 
+                    // Beri jeda 2 detik agar pesan intro sampai duluan sebelum license
+                    sleep(2);
+
                     // Generate License (Status: Not Paid)
                     // Logic mirip dengan paid transition, tapi disederhanakan untuk case ini
                     $newKey = 'MCM-' . Str::upper(Str::random(8));
@@ -648,18 +651,33 @@ class ScalevWebhookController extends Controller
             "*Admin MCM*";
 
         try {
-            $multipart = [
-                ['name' => 'secret', 'contents' => $cfg->ApiSecret],
-                ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
-                ['name' => 'recipient', 'contents' => $target],
-                ['name' => 'type', 'contents' => 'text'],
-                ['name' => 'message', 'contents' => $message],
-            ];
-            Http::timeout(20)
-                ->withOptions(['multipart' => $multipart])
-                ->post('https://whapify.id/api/send/whatsapp');
+            $maskedSecret = strlen((string)$cfg->ApiSecret) > 8
+                ? substr($cfg->ApiSecret, 0, 6) . '•••' . substr($cfg->ApiSecret, -2)
+                : '•••';
             
-            Log::channel('whatsapp')->info('WA pre-notification sent', ['phone' => $target]);
+            Log::channel('whatsapp')->info('Attempting WA pre-notification via Whapify', [
+                'phone' => $target,
+                'account' => $cfg->AccountUniqueId,
+                'secret_masked' => $maskedSecret,
+            ]);
+
+            $resp = Http::timeout(20)
+                ->asMultipart()
+                ->post('https://whapify.id/api/send/whatsapp', [
+                    'secret' => $cfg->ApiSecret,
+                    'account' => $cfg->AccountUniqueId,
+                    'accountUniqueId' => $cfg->AccountUniqueId,
+                    'recipient' => $target,
+                    'type' => 'text',
+                    'message' => $message,
+                    'text' => $message,
+                ]);
+
+            if ($resp->successful()) {
+                Log::channel('whatsapp')->info('WA pre-notification sent', ['phone' => $target, 'status' => $resp->status()]);
+            } else {
+                Log::channel('whatsapp')->warning('WA pre-notification failed', ['phone' => $target, 'status' => $resp->status(), 'body' => $resp->body()]);
+            }
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->warning('WA pre-notification exception', ['error' => $e->getMessage()]);
         }
