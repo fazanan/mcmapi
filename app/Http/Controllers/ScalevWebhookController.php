@@ -568,10 +568,14 @@ class ScalevWebhookController extends Controller
      */
     private function sendWhatsappFreeQuotaExceeded(string $phone, ?string $name): void
     {
-        $cfg = DB::table('WhatsAppConfig')
-            ->orderByDesc('UpdatedAt')
-            ->orderByDesc('Id')
-            ->first();
+        // Prioritaskan Config ID=2 untuk pesan terkait akses gratis
+        $cfg = DB::table('WhatsAppConfig')->where('Id', 2)->first();
+        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+            $cfg = DB::table('WhatsAppConfig')
+                ->orderByDesc('UpdatedAt')
+                ->orderByDesc('Id')
+                ->first();
+        }
 
         if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
             Log::channel('whatsapp')->info('WA quota exceeded not sent: missing ApiSecret/AccountUniqueId');
@@ -614,10 +618,14 @@ class ScalevWebhookController extends Controller
      */
     private function sendWhatsappFreeAccessPreNotification(string $phone, ?string $name): void
     {
-        $cfg = DB::table('WhatsAppConfig')
-            ->orderByDesc('UpdatedAt')
-            ->orderByDesc('Id')
-            ->first();
+        // Prioritaskan Config ID=2 untuk pesan terkait akses gratis
+        $cfg = DB::table('WhatsAppConfig')->where('Id', 2)->first();
+        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+            $cfg = DB::table('WhatsAppConfig')
+                ->orderByDesc('UpdatedAt')
+                ->orderByDesc('Id')
+                ->first();
+        }
 
         if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
             Log::channel('whatsapp')->info('WA pre-notification not sent: missing ApiSecret/AccountUniqueId');
@@ -662,11 +670,36 @@ class ScalevWebhookController extends Controller
      */
     private function sendWhatsappLogin(string $phone, string $name, string $email, string $plainPassword, $lic, $orderRow, string $statusText): void
     {
-        // Ambil konfigurasi WhatsApp terbaru
-        $cfg = DB::table('WhatsAppConfig')
-            ->orderByDesc('UpdatedAt')
-            ->orderByDesc('Id')
-            ->first();
+        // Ambil detail license & pembelian untuk menentukan produk
+        $licenseKey = $lic ? ($lic->license_key ?? '') : '';
+        $productName = $orderRow ? ($orderRow->ProductName ?? '') : ($lic ? ($lic->product_name ?? '') : '');
+        if ($productName) {
+            $productName = preg_replace('/Akses\s+Gratis/i', 'Akses 3 Hari', (string)$productName);
+        }
+
+        // Tentukan Config ID berdasarkan nama produk
+        $cfg = null;
+        if ($productName && (stripos($productName, 'Akses Gratis') !== false || stripos($productName, 'Akses 3 Hari') !== false)) {
+            $cfg = DB::table('WhatsAppConfig')->where('Id', 2)->first();
+            if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+                $cfg = DB::table('WhatsAppConfig')
+                    ->orderByDesc('UpdatedAt')
+                    ->orderByDesc('Id')
+                    ->first();
+            }
+        } else {
+            // Untuk produk berbayar, gunakan Config ID=1
+            $cfg = DB::table('WhatsAppConfig')->where('Id', 1)->first();
+            if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+                $cfg = DB::table('WhatsAppConfig')
+                    ->where('Id', '<>', 2)
+                    ->orderByDesc('UpdatedAt')
+                    ->first();
+                if (!$cfg) {
+                    $cfg = DB::table('WhatsAppConfig')->orderByDesc('UpdatedAt')->first();
+                }
+            }
+        }
 
         if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
             Log::channel('whatsapp')->info('WA login not sent: missing ApiSecret/AccountUniqueId in WhatsAppConfig');
@@ -686,12 +719,6 @@ class ScalevWebhookController extends Controller
 
         $appUrl = rtrim(env('APP_URL', url('/')), '/');
         $loginUrl = $appUrl . '/login';
-        // Ambil detail license & pembelian
-        $licenseKey = $lic ? ($lic->license_key ?? '') : '';
-        $productName = $orderRow ? ($orderRow->ProductName ?? '') : ($lic ? ($lic->product_name ?? '') : '');
-        if ($productName) {
-            $productName = preg_replace('/Akses\s+Gratis/i', 'Akses 3 Hari', (string)$productName);
-        }
         $tenorDays = $lic ? ((int)($lic->tenor_days ?? 0)) : 0;
         $expiresAt = $lic && !empty($lic->expires_at_utc) ? Carbon::parse($lic->expires_at_utc)->setTimezone('Asia/Jakarta')->format('d-m-Y H:i') : null;
         $price = $orderRow ? ($orderRow->VariantPrice ?? null) : null;
@@ -761,11 +788,22 @@ class ScalevWebhookController extends Controller
      */
     private function sendWhatsappOrderCreated(string $phone, ?string $name, ?string $productName, $price): void
     {
-        // Ambil konfigurasi WhatsApp terbaru
-        $cfg = DB::table('WhatsAppConfig')
-            ->orderByDesc('UpdatedAt')
-            ->orderByDesc('Id')
-            ->first();
+        // Ambil konfigurasi WhatsApp untuk produk berbayar (ID 1 atau selain 2)
+        $cfg = DB::table('WhatsAppConfig')->where('Id', 1)->first();
+        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+            $cfg = DB::table('WhatsAppConfig')
+                ->where('Id', '<>', 2)
+                ->orderByDesc('UpdatedAt')
+                ->first();
+            
+            // Fallback terakhir: ambil apa saja
+            if (!$cfg) {
+                $cfg = DB::table('WhatsAppConfig')
+                    ->orderByDesc('UpdatedAt')
+                    ->orderByDesc('Id')
+                    ->first();
+            }
+        }
 
         if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
             Log::channel('whatsapp')->info('WA order.created not sent: missing ApiSecret/AccountUniqueId in WhatsAppConfig');
