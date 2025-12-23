@@ -1054,21 +1054,37 @@ class ScalevWebhookController extends Controller
 
         $safeName = $name ?: (strstr($email, '@', true) ?: 'Member');
         $productLine = '';
+        $isFreeAccess = false;
         if (!empty($productNameCandidate)) {
             $productNormalized = preg_replace('/Akses\s+Gratis/i', 'Akses 3 Hari', (string)$productNameCandidate);
             $productLine = "Produk: {$productNormalized}\n";
+            $isFreeAccess = (stripos($productNameCandidate, 'Akses Gratis') !== false || stripos($productNameCandidate, 'Akses 3 Hari') !== false);
         }
-        $message = "Data License Mesin Cuan Maximal\n\n".
-            "Nama: {$safeName}\n".
-            "Email: {$email}\n".
-            $productLine .
-            "License: {$licenseKey}\n".
-            "Version: {$installerVersion}\n".
-            "Link Installer:\n\n".
-            "{$installerLink}\n\n".
-            "Untuk tutorial ada digroup telegram ya kak silakan bergabung\n".
-            "{$groupLink}\n\n".
-            "Terimakasih";
+
+        if ($isFreeAccess) {
+            $message = "Halo Kak,\n\n" .
+                "*Data License Mesin Cuan Maximal*\n\n" .
+                "Nama: {$safeName}\n" .
+                "Email: {$email}\n" .
+                $productLine .
+                "License: {$licenseKey}\n\n" .
+                "Untuk Aplikasi, Tutorial dan Tanya Jawab ada digroup whatsapp ya kak silakan bergabung klik dibawah ini\n" .
+                "https://s.id/mcmtrial\n\n" .
+                "Terimakasih\n" .
+                "*Admin MCM*";
+        } else {
+            $message = "Data License Mesin Cuan Maximal\n\n".
+                "Nama: {$safeName}\n".
+                "Email: {$email}\n".
+                $productLine .
+                "License: {$licenseKey}\n".
+                "Version: {$installerVersion}\n".
+                "Link Installer:\n\n".
+                "{$installerLink}\n\n".
+                "Untuk tutorial ada digroup telegram ya kak silakan bergabung\n".
+                "{$groupLink}\n\n".
+                "Terimakasih";
+        }
 
         // Kirim via Whapify API (multipart/form-data)
         try {
@@ -1253,6 +1269,34 @@ class ScalevWebhookController extends Controller
                 } catch (\Throwable $e2) {
                     Log::warning('Gagal update delivery status (exception)', ['license' => $licenseKey, 'error' => $e2->getMessage()]);
                 }
+            }
+        }
+ 
+        $needsBonus = !empty($productNameCandidate) && stripos($productNameCandidate, 'Bonus Exclusive') !== false;
+        if ($needsBonus) {
+            $bonusMessage = "*Bonus Pembelian MCM*\nSilakan akses bonusnya disini ya kak\n\nhttps://drive.google.com/drive/folders/1k78yZYLD7rHWoOigOLb78MaJEXD8W0JX?usp=drive_link";
+            try {
+                $respB = Http::timeout(20)
+                    ->asMultipart()
+                    ->post('https://whapify.id/api/send/whatsapp', [
+                        'secret' => $cfg->ApiSecret,
+                        'account' => $cfg->AccountUniqueId,
+                        'accountUniqueId' => $cfg->AccountUniqueId,
+                        'recipient' => $target,
+                        'type' => 'text',
+                        'message' => $bonusMessage,
+                        'text' => $bonusMessage,
+                    ]);
+                Log::channel('whatsapp')->info('WA bonus sent via Whapify', [
+                    'phone' => $target,
+                    'http' => $respB->status(),
+                    'account' => $cfg->AccountUniqueId,
+                ]);
+            } catch (\Throwable $e) {
+                Log::channel('whatsapp')->warning('WA bonus exception via Whapify', [
+                    'error' => $e->getMessage(),
+                    'account' => $cfg->AccountUniqueId ?? null,
+                ]);
             }
         }
     }
