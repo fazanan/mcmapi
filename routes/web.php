@@ -793,6 +793,37 @@ Route::post('/api/license/signature/check', function (Request $request) {
     }
     return response()->json(['ok'=>false,'message'=>'Signature tidak cocok dengan varian yang dikenal.','details'=>$details],400);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::post('/api/license/check', function (Request $request) {
+    $key = trim((string)($request->input('LicenseKey') ?? $request->input('licenseKey') ?? $request->input('license') ?? $request->input('key')));
+    if (!$key) {
+        return response()->json(['Success'=>false,'Message'=>'LicenseKey wajib diisi.','ErrorCode'=>'INVALID_REQUEST'],400);
+    }
+    $lic = CustomerLicense::query()->where('license_key',$key)->first();
+    if (!$lic) {
+        return response()->json(['Success'=>false,'Message'=>'License not found.','ErrorCode'=>'LICENSE_NOT_FOUND'],404);
+    }
+    $exp = $lic->expires_at_utc ? \Carbon\Carbon::parse($lic->expires_at_utc)->format('Y-m-d') : null;
+    $statusVal = (string)($lic->status ?? '');
+    return response()->json([
+        'Success' => true,
+        'Message' => 'License found.',
+        'Data' => [
+            'LicenseKey' => $lic->license_key,
+            'Email' => $lic->email,
+            'Status' => $statusVal,
+            'ExpiresAt' => optional($lic->expires_at_utc)->toISOString(),
+            'expirationdate' => $exp,
+            'expirationDate' => $exp,
+            'IsActivated' => (bool)$lic->is_activated,
+            'ActivationDate' => optional($lic->activation_date_utc)->toISOString(),
+            'MachineId' => $lic->machine_id,
+            'Edition' => $lic->edition,
+            'ProductName' => $lic->product_name,
+        ]
+    ]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
 Route::post('/api/license/generate', function (Request $request) {
     $email = $request->input('Email');
     $edition = trim((string)($request->input('Edition') ?? ''));
