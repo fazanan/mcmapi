@@ -820,6 +820,38 @@ Route::post('/api/license/check', function (Request $request) {
             'MachineId' => $lic->machine_id,
             'Edition' => $lic->edition,
             'ProductName' => $lic->product_name,
+            'Version' => $lic->version,
+            'LastUsed' => optional($lic->last_used)->toISOString(),
+        ]
+    ]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::post('/api/license/usage', function (Request $request) {
+    $key = trim((string)($request->input('LicenseKey') ?? $request->input('licenseKey') ?? $request->input('license') ?? $request->input('key')));
+    $version = trim((string)($request->input('Version') ?? $request->input('version') ?? $request->input('ver')));
+    
+    if (!$key) {
+        return response()->json(['Success'=>false,'Message'=>'LicenseKey wajib diisi.','ErrorCode'=>'INVALID_REQUEST'],400);
+    }
+    
+    $lic = CustomerLicense::query()->where('license_key',$key)->first();
+    if (!$lic) {
+        return response()->json(['Success'=>false,'Message'=>'License not found.','ErrorCode'=>'LICENSE_NOT_FOUND'],404);
+    }
+    
+    $lic->last_used = now('UTC');
+    if ($version) {
+        $lic->version = $version;
+    }
+    $lic->save();
+    
+    return response()->json([
+        'Success' => true,
+        'Message' => 'Usage recorded.',
+        'Data' => [
+            'LicenseKey' => $lic->license_key,
+            'Version' => $lic->version,
+            'LastUsed' => optional($lic->last_used)->toISOString(),
         ]
     ]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
