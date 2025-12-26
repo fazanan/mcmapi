@@ -119,6 +119,8 @@ Route::get('/api/customerlicense', function (Request $request) {
             'ActivationDate' => optional($m->activation_date_utc)->toISOString(),
             'ExpiresAt' => optional($m->expires_at_utc)->toISOString(),
             'MaxhineId' => $m->machine_id,
+            'Version' => $m->version,
+            'LastUsed' => optional($m->last_used)->toISOString(),
         ];
     });
     return response()->json($items);
@@ -148,6 +150,8 @@ Route::get('/api/customerlicense/{id}', function ($id) {
         'MaxSeats' => $m->max_seats,
         'MaxVideo' => $m->max_video,
         'Features' => $m->features,
+        'Version' => $m->version,
+        'LastUsed' => optional($m->last_used)->toISOString(),
         'RowVerBase64' => null,
     ]);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
@@ -829,6 +833,7 @@ Route::post('/api/license/check', function (Request $request) {
 Route::post('/api/license/usage', function (Request $request) {
     $key = trim((string)($request->input('LicenseKey') ?? $request->input('licenseKey') ?? $request->input('license') ?? $request->input('key')));
     $version = trim((string)($request->input('Version') ?? $request->input('version') ?? $request->input('ver')));
+    $lastUsedInput = $request->input('LastUsed') ?? $request->input('lastUsed') ?? $request->input('last_used');
     
     if (!$key) {
         return response()->json(['Success'=>false,'Message'=>'LicenseKey wajib diisi.','ErrorCode'=>'INVALID_REQUEST'],400);
@@ -839,7 +844,18 @@ Route::post('/api/license/usage', function (Request $request) {
         return response()->json(['Success'=>false,'Message'=>'License not found.','ErrorCode'=>'LICENSE_NOT_FOUND'],404);
     }
     
-    $lic->last_used = now('UTC');
+    // Gunakan waktu dari client jika ada, jika tidak gunakan waktu server
+    $timestamp = now('UTC');
+    if ($lastUsedInput) {
+        try {
+            $timestamp = \Illuminate\Support\Carbon::parse($lastUsedInput)->setTimezone('UTC');
+        } catch (\Throwable $e) {
+            // Jika format tanggal invalid, fallback ke now()
+            $timestamp = now('UTC');
+        }
+    }
+
+    $lic->last_used = $timestamp;
     if ($version) {
         $lic->version = $version;
     }

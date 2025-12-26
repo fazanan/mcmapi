@@ -23,7 +23,7 @@
       <th>OrderId</th>
       <th>LicenseKey</th>
       <th>Owner</th>
-      <th>VO Token</th>
+      <th>Version</th>
       <th>Email</th>
       <th>Phone</th>
       <th>Edition</th>
@@ -36,6 +36,7 @@
       <th>ActivationDate (UTC)</th>
       <th>ExpiresAt (UTC)</th>
       <th>MaxhineId</th>
+      <th>Last Used</th>
     </tr>
   </thead>
   <tbody></tbody>

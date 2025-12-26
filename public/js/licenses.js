@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `<td>${r.OrderId || ''}</td>` +
         `<td>${r.LicenseKey || ''}</td>` +
         `<td>${r.Owner || ''}</td>` +
-        `<td>${r.VoSecondsRemaining || ''}</td>` +
+        `<td>${r.Version || ''}</td>` +
         `<td>${r.Email || ''}</td>` +
         `<td>${r.Phone || ''}</td>` +
         `<td>${r.Edition || ''}</td>` +
@@ -35,7 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
         `<td>${r.IsActivated ? 'Yes' : 'No'}</td>` +
         `<td>${toUtcString(r.ActivationDate)}</td>` +
         `<td>${toUtcString(r.ExpiresAt)}</td>` +
-        `<td>${r.MaxhineId || ''}</td>`;
+        `<td>${r.MaxhineId || ''}</td>` +
+        `<td>${toUtcString(r.LastUsed)}</td>`;
       tbody.appendChild(tr);
     }
     dt = $('#tblLicenses').DataTable({ responsive: true, pageLength: 25, order: [[1, 'desc']] });
