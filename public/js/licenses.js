@@ -40,10 +40,33 @@ document.addEventListener('DOMContentLoaded', () => {
       tbody.appendChild(tr);
     }
     dt = $('#tblLicenses').DataTable({ responsive: true, pageLength: 25, order: [[1, 'desc']] });
-    $('#tblLicenses .btn-edit').off('click').on('click', async function () { const id = this.getAttribute('data-id'); const data = await api.one(id); fillForm(data); $('#editModal').modal('show'); });
-    $('#tblLicenses .btn-del').off('click').on('click', async function () { const id = this.getAttribute('data-id'); if (confirm(`Delete ${id}?`)) { await api.del(id, false); await reload(); } });
-    $('#tblLicenses .btn-topup').off('click').on('click', async function () { const id = this.getAttribute('data-id'); openVoModal(id); });
   }
+  
+  // Delegated events untuk tombol di dalam tabel (aman untuk DataTables paging/sorting)
+  $('#tblLicenses tbody').on('click', '.btn-edit', async function () {
+      const id = this.getAttribute('data-id');
+      const data = await api.one(id);
+      fillForm(data);
+      $('#editModal').modal('show');
+  });
+
+  $('#tblLicenses tbody').on('click', '.btn-del', async function () {
+      const id = this.getAttribute('data-id');
+      if (confirm(`Delete ${id}?`)) {
+          try {
+              await api.del(id, false);
+              await reload();
+          } catch(e) {
+              alert('Gagal menghapus: ' + e.message);
+          }
+      }
+  });
+
+  $('#tblLicenses tbody').on('click', '.btn-topup', async function () {
+      const id = this.getAttribute('data-id');
+      openVoModal(id);
+  });
+
   async function reload() { const q = document.getElementById('txtSearch').value.trim(); const rows = await api.list(q || null); renderRows(rows); }
   function fillForm(d) {
     document.getElementById('OrderId').value = d.OrderId || '';
