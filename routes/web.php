@@ -352,23 +352,47 @@ Route::match(['GET','POST'],'/api/license/reset', function (Request $request) {
         DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Failed','message'=>'Email tidak sesuai.','created_at'=>now(),'updated_at'=>now()]);
         return response()->json(['Success'=>false,'Message'=>'Email tidak sesuai.','ErrorCode'=>'EMAIL_MISMATCH'],400);
     }
-    // Terima signature normal (License|MachineId|Email). Jika gagal, abaikan MachineId,
-    // atau coba urutan alternatif (License|Email|MachineId).
-    // Juga coba dengan MachineId baru yang dikirim user (jika install ulang/pindah PC).
-    $inputs = [
-        $key.'|'.($lic->machine_id ?? '').'|'.$email,
-        $key.'|'.$email,
-        $key.'||'.$email,
-        $key.'|'.$email.'|'.($lic->machine_id ?? ''),
-    ];
-    if ($newMid) {
-        $inputs[] = $key.'|'.$newMid.'|'.$email;
-        $inputs[] = $key.'|'.$email.'|'.$newMid;
+    // Verifikasi Signature Robust: Coba berbagai variasi case dan format
+    $inputs = [];
+    
+    // Variasi komponen untuk antisipasi case sensitivity client
+    $keyVars = array_unique([$key, strtoupper($key), strtolower($key)]);
+    $emailVars = array_unique([$email, strtolower($email), strtoupper($email)]);
+    
+    // Variasi Machine ID
+    $midVars = ['']; // Selalu coba anggap kosong
+    if ($lic->machine_id) { $midVars[] = $lic->machine_id; }
+    if ($newMid && $newMid !== $lic->machine_id) { $midVars[] = $newMid; }
+    $midVars = array_unique($midVars);
+
+    foreach ($keyVars as $_k) {
+        foreach ($emailVars as $_e) {
+            // Pola 1: Key|Email (Tanpa Mid)
+            $inputs[] = "$_k|$_e";
+            
+            foreach ($midVars as $_m) {
+                // Pola 2: Key|Mid|Email
+                $inputs[] = "$_k|$_m|$_e";
+                // Pola 3: Key|Email|Mid
+                $inputs[] = "$_k|$_e|$_m";
+                // Pola 4: Key||Email (Jika mid kosong menghasilkan separator ganda)
+                if ($_m === '') { $inputs[] = "$_k||$_e"; }
+            }
+        }
     }
 
-    $ok = false; foreach ($inputs as $canon) { if (verifySignatureFlexible($canon, $sig)) { $ok = true; break; } }
+    $ok = false; 
+    foreach ($inputs as $canon) { 
+        if (verifySignatureFlexible($canon, $sig)) { 
+            $ok = true; 
+            break; 
+        } 
+    }
+
     if (!$ok) {
-        DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Failed','message'=>'Signature tidak valid.','created_at'=>now(),'updated_at'=>now()]);
+        // Log detail untuk debugging: catat signature yang diterima dan beberapa sampel input server
+        $debugMsg = "Invalid Sig. Recv: $sig. Key: $key, Email: $email. MidDB: ".($lic->machine_id??'').", MidReq: $newMid.";
+        DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Failed','message'=>$debugMsg,'created_at'=>now(),'updated_at'=>now()]);
         return response()->json(['Success'=>false,'Message'=>'Signature tidak valid.','ErrorCode'=>'INVALID_SIGNATURE'],400);
     }
     $lic->status = 'Reset';
