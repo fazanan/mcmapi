@@ -26,6 +26,7 @@
           @if(strtolower(auth()->user()->role ?? '') === 'admin')
             <li class="nav-item"><a class="nav-link {{ Request::is('users') ? 'active' : '' }}" href="/users">Users</a></li>
             <li class="nav-item"><a class="nav-link {{ Request::is('licenses') ? 'active' : '' }}" href="/licenses">Licenses</a></li>
+            <li class="nav-item"><a class="nav-link {{ Request::is('license-logs') ? 'active' : '' }}" href="/license-logs">Logs</a></li>
             <li class="nav-item"><a class="nav-link {{ Request::is('orders') ? 'active' : '' }}" href="/orders">Orders</a></li>
             <li class="nav-item"><a class="nav-link {{ Request::is('config-keys') ? 'active' : '' }}" href="/config-keys">API Keys</a></li>
             <li class="nav-item"><a class="nav-link {{ Request::is('whatsapp-config') ? 'active' : '' }}" href="/whatsapp-config">WhatsApp Config</a></li>

@@ -71,6 +71,10 @@ Route::get('/whatsapp-config', function () {
     return view('whatsappconfig.index');
 })->middleware(['auth','role:admin']);
 
+Route::get('/license-logs', function () {
+    return view('licenselogs.index');
+})->middleware(['auth','role:admin']);
+
 // Member-accessible Produk page
 Route::get('/produk', function () {
     return view('produk.index');
@@ -85,6 +89,36 @@ Route::get('/users', function () {
 // ScaleV webhook: create member access when status transitions to paid
 Route::post('/webhooks/scalev', [ScalevWebhookController::class, 'handle'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::get('/api/license-logs', function (Request $request) {
+    $q = $request->query('q');
+    $rows = DB::table('license_actions')
+        ->when($q, function ($qr) use ($q) {
+            $like = '%'.$q.'%';
+            $qr->where('license_key','like',$like)
+               ->orWhere('email','like',$like)
+               ->orWhere('action','like',$like)
+               ->orWhere('result','like',$like)
+               ->orWhere('message','like',$like);
+        })
+        ->orderByDesc('created_at')
+        ->limit(500) // Batasi 500 log terakhir
+        ->get();
+        
+    $items = $rows->map(function($x){
+        return [
+            'id' => $x->id,
+            'license_key' => $x->license_key,
+            'order_id' => $x->order_id,
+            'email' => $x->email,
+            'action' => $x->action,
+            'result' => $x->result,
+            'message' => $x->message,
+            'created_at' => $x->created_at ? \Illuminate\Support\Carbon::parse($x->created_at)->setTimezone('UTC')->toISOString() : null,
+        ];
+    });
+    return response()->json($items);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::get('/api/customerlicense', function (Request $request) {
     $q = $request->query('q');
