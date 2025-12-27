@@ -369,10 +369,23 @@ Route::post('/api/license/activate', function (Request $request) {
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::match(['GET','POST'],'/api/license/reset', function (Request $request) {
+    // Ambil input standar (Trimmed oleh middleware atau manual)
     $key = trim((string)($request->input('LicenseKey') ?? $request->input('licenseKey') ?? $request->input('license') ?? $request->input('key')));
     $email = trim((string)($request->input('Email') ?? $request->input('email')));
     $sig = trim((string)($request->input('Signature') ?? $request->input('signature') ?? $request->input('sig')));
     $newMid = trim((string)($request->input('MachineId') ?? $request->input('machineId') ?? $request->input('mid')));
+
+    // Ambil Raw Input dari JSON Body (untuk menangani kasus spasi yang tidak sengaja terkirim dan ter-hash di client)
+    $rawContent = $request->getContent();
+    $rawJson = json_decode($rawContent, true);
+    $rawKey = null;
+    $rawEmail = null;
+    $rawMid = null;
+    if (is_array($rawJson)) {
+        $rawKey = $rawJson['LicenseKey'] ?? $rawJson['licenseKey'] ?? $rawJson['license'] ?? $rawJson['key'] ?? null;
+        $rawEmail = $rawJson['Email'] ?? $rawJson['email'] ?? null;
+        $rawMid = $rawJson['MachineId'] ?? $rawJson['machineId'] ?? $rawJson['mid'] ?? null;
+    }
 
     if (!$key || !$email || !$sig) {
         return response()->json(['Success'=>false,'Message'=>'LicenseKey, Email, dan Signature wajib diisi.','ErrorCode'=>'INVALID_REQUEST'],400);
@@ -389,14 +402,20 @@ Route::match(['GET','POST'],'/api/license/reset', function (Request $request) {
     // Verifikasi Signature Robust: Coba berbagai variasi case dan format
     $inputs = [];
     
-    // Variasi komponen untuk antisipasi case sensitivity client
-    $keyVars = array_unique([$key, strtoupper($key), strtolower($key)]);
-    $emailVars = array_unique([$email, strtolower($email), strtoupper($email)]);
+    // Variasi komponen untuk antisipasi case sensitivity client & raw input
+    $keyVars = [$key, strtoupper($key), strtolower($key)];
+    if ($rawKey && $rawKey !== $key) { $keyVars[] = $rawKey; }
+    $keyVars = array_unique($keyVars);
+
+    $emailVars = [$email, strtolower($email), strtoupper($email)];
+    if ($rawEmail && $rawEmail !== $email) { $emailVars[] = $rawEmail; }
+    $emailVars = array_unique($emailVars);
     
     // Variasi Machine ID
     $midVars = ['']; // Selalu coba anggap kosong
     if ($lic->machine_id) { $midVars[] = $lic->machine_id; }
     if ($newMid && $newMid !== $lic->machine_id) { $midVars[] = $newMid; }
+    if ($rawMid !== null && $rawMid !== $newMid) { $midVars[] = $rawMid; }
     $midVars = array_unique($midVars);
 
     foreach ($keyVars as $_k) {
@@ -416,18 +435,25 @@ Route::match(['GET','POST'],'/api/license/reset', function (Request $request) {
     }
 
     $ok = false; 
+    $successDetail = "";
     foreach ($inputs as $canon) { 
         if (verifySignatureFlexible($canon, $sig)) { 
             $ok = true; 
+            $successDetail = "(Matched: $canon)";
             break; 
         } 
     }
 
     if (!$ok) {
-        // Log detail untuk debugging: catat signature yang diterima dan beberapa sampel input server
-        $debugMsg = "Invalid Sig. Recv: $sig. Key: $key, Email: $email. MidDB: ".($lic->machine_id??'').", MidReq: $newMid.";
-        DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Failed','message'=>$debugMsg,'created_at'=>now(),'updated_at'=>now()]);
-        return response()->json(['Success'=>false,'Message'=>'Signature tidak valid.','ErrorCode'=>'INVALID_SIGNATURE'],400);
+        // FALLBACK STRATEGY (Saran User):
+        // Jika signature gagal (mungkin karena MachineID mismatch), kita tetap izinkan Reset
+        // ASALKAN Email dan LicenseKey sudah cocok (sudah diverifikasi di atas).
+        // Sebagai pengaman tambahan, kita pastikan MaxSeats = 1 agar tidak terjadi multiple login bocor.
+        
+        $lic->max_seats = 1;
+        
+        $debugMsg = "Invalid Sig. Fallback to Key+Email check. Enforcing MaxSeats=1. Recv: $sig.";
+        DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Warning','message'=>$debugMsg,'created_at'=>now(),'updated_at'=>now()]);
     }
     $lic->status = 'Reset';
     $lic->is_activated = false;
@@ -435,7 +461,7 @@ Route::match(['GET','POST'],'/api/license/reset', function (Request $request) {
     $prevMid = $lic->machine_id;
     $lic->machine_id = null;
     $lic->save();
-    DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Success','message'=>'License reset.','created_at'=>now(),'updated_at'=>now()]);
+    DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Success','message'=>'License reset. '.$successDetail,'created_at'=>now(),'updated_at'=>now()]);
     $exp = $lic->expires_at_utc ? $lic->expires_at_utc->format('Y-m-d') : null;
     $statusVal = (string)($lic->status ?? '');
     $editionVal = (string)($lic->edition ?? '');
