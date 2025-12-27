@@ -338,6 +338,8 @@ Route::match(['GET','POST'],'/api/license/reset', function (Request $request) {
     $key = trim((string)($request->input('LicenseKey') ?? $request->input('licenseKey') ?? $request->input('license') ?? $request->input('key')));
     $email = trim((string)($request->input('Email') ?? $request->input('email')));
     $sig = trim((string)($request->input('Signature') ?? $request->input('signature') ?? $request->input('sig')));
+    $newMid = trim((string)($request->input('MachineId') ?? $request->input('machineId') ?? $request->input('mid')));
+
     if (!$key || !$email || !$sig) {
         return response()->json(['Success'=>false,'Message'=>'LicenseKey, Email, dan Signature wajib diisi.','ErrorCode'=>'INVALID_REQUEST'],400);
     }
@@ -352,12 +354,18 @@ Route::match(['GET','POST'],'/api/license/reset', function (Request $request) {
     }
     // Terima signature normal (License|MachineId|Email). Jika gagal, abaikan MachineId,
     // atau coba urutan alternatif (License|Email|MachineId).
+    // Juga coba dengan MachineId baru yang dikirim user (jika install ulang/pindah PC).
     $inputs = [
         $key.'|'.($lic->machine_id ?? '').'|'.$email,
         $key.'|'.$email,
         $key.'||'.$email,
         $key.'|'.$email.'|'.($lic->machine_id ?? ''),
     ];
+    if ($newMid) {
+        $inputs[] = $key.'|'.$newMid.'|'.$email;
+        $inputs[] = $key.'|'.$email.'|'.$newMid;
+    }
+
     $ok = false; foreach ($inputs as $canon) { if (verifySignatureFlexible($canon, $sig)) { $ok = true; break; } }
     if (!$ok) {
         DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Failed','message'=>'Signature tidak valid.','created_at'=>now(),'updated_at'=>now()]);
