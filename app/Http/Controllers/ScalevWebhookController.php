@@ -1414,8 +1414,14 @@ HTML;
         }
         if (!$target) return;
 
-        $message = "Silakan *Join ke Group Whatsapp MCM Info* untuk informasi jadwal demo dan tanya jawab seputar MCM klik disini : \n" .
-                   "https://chat.whatsapp.com/JKa0ASoWRl80oTkt0cVlyd";
+        $message = "*Dengan MCM anda bisa*:\n\n" .
+                   "1. *Gandakan 2-3 video sumber* menjadi puluhan bahkan ratusan video Unik\n" .
+                   "2. Buat banyak _Script Voice Over_ sekali klik\n" .
+                   "3. Buat _Voice Over_ sekali klik\n" .
+                   "4. Buat _Auto Caption_ video sekali klik\n" .
+                   "5. _Upload massal video_ konten dan tinggal ngopi :)\n\n" .
+                   "Silakan *Join ke Group Whatsapp MCM Demo* untuk informasi jadwal demo dan tanya jawab seputar MCM klik disini : https://chat.whatsapp.com/HZ4aaRBFt7L65Dj6cz9b6w\n\n" .
+                   "*Admin MCM*";
 
         try {
             $maskedSecret = strlen((string)$cfg->ApiSecret) > 8
