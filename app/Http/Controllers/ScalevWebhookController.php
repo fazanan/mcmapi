@@ -298,6 +298,10 @@ class ScalevWebhookController extends Controller
                 }
 
             } elseif ($event === 'order.created' && !empty($phone)) {
+                if ($productName && stripos($productName, 'LIHAT DEMO') !== false) {
+                    $this->sendWhatsappLihatDemo($phone);
+                }
+                
                 // Normal behavior for other products (Payment Reminder)
                 $this->sendWhatsappOrderCreated(
                     $phone,
@@ -1374,5 +1378,45 @@ HTML;
             'email' => $user->email,
             'license_key' => $licenseKey,
         ]);
+    }
+
+    private function sendWhatsappLihatDemo(string $phone): void
+    {
+        $cfg = DB::table('WhatsAppConfig')
+            ->orderByDesc('UpdatedAt')
+            ->orderByDesc('Id')
+            ->first();
+
+        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+            Log::channel('whatsapp')->info('WA Lihat Demo not sent: missing ApiSecret/AccountUniqueId');
+            return;
+        }
+
+        $target = preg_replace('/\s+/', '', $phone);
+        $target = preg_replace('/[^0-9+]/', '', $target);
+        if (preg_match('/^0\d+$/', $target)) {
+            $target = '62' . substr($target, 1);
+        }
+        if (!$target) return;
+
+        $message = "Silakan *Join ke Group Whatsapp MCM Info* untuk informasi jadwal demo dan tanya jawab seputar MCM klik disini : \n" .
+                   "https://chat.whatsapp.com/JKa0ASoWRl80oTkt0cVlyd";
+
+        try {
+            $multipart = [
+                ['name' => 'secret', 'contents' => $cfg->ApiSecret],
+                ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
+                ['name' => 'recipient', 'contents' => $target],
+                ['name' => 'type', 'contents' => 'text'],
+                ['name' => 'message', 'contents' => $message],
+            ];
+            Http::timeout(20)
+                ->withOptions(['multipart' => $multipart])
+                ->post('https://whapify.id/api/send/whatsapp');
+            
+            Log::channel('whatsapp')->info('WA Lihat Demo sent', ['phone' => $target]);
+        } catch (\Throwable $e) {
+            Log::channel('whatsapp')->warning('WA Lihat Demo exception', ['error' => $e->getMessage()]);
+        }
     }
 }
