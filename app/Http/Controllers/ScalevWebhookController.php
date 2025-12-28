@@ -1382,20 +1382,35 @@ HTML;
 
     private function sendWhatsappLihatDemo(string $phone): void
     {
-        $cfg = DB::table('WhatsAppConfig')
-            ->orderByDesc('UpdatedAt')
-            ->orderByDesc('Id')
-            ->first();
+        // Config retrieval matching sendWhatsappOrderCreated logic
+        $cfg = DB::table('WhatsAppConfig')->where('Id', 1)->first();
+        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+            $cfg = DB::table('WhatsAppConfig')
+                ->where('Id', '<>', 2)
+                ->orderByDesc('UpdatedAt')
+                ->first();
+            
+            if (!$cfg) {
+                $cfg = DB::table('WhatsAppConfig')
+                    ->orderByDesc('UpdatedAt')
+                    ->orderByDesc('Id')
+                    ->first();
+            }
+        }
 
         if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
             Log::channel('whatsapp')->info('WA Lihat Demo not sent: missing ApiSecret/AccountUniqueId');
             return;
         }
 
+        // Phone normalization matching sendWhatsappOrderCreated
         $target = preg_replace('/\s+/', '', $phone);
         $target = preg_replace('/[^0-9+]/', '', $target);
         if (preg_match('/^0\d+$/', $target)) {
             $target = '62' . substr($target, 1);
+        }
+        if (preg_match('/^\+62\d+$/', $target)) {
+            $target = substr($target, 1);
         }
         if (!$target) return;
 
@@ -1403,18 +1418,53 @@ HTML;
                    "https://chat.whatsapp.com/JKa0ASoWRl80oTkt0cVlyd";
 
         try {
-            $multipart = [
-                ['name' => 'secret', 'contents' => $cfg->ApiSecret],
-                ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
-                ['name' => 'recipient', 'contents' => $target],
-                ['name' => 'type', 'contents' => 'text'],
-                ['name' => 'message', 'contents' => $message],
-            ];
-            Http::timeout(20)
-                ->withOptions(['multipart' => $multipart])
-                ->post('https://whapify.id/api/send/whatsapp');
+            $maskedSecret = strlen((string)$cfg->ApiSecret) > 8
+                ? substr($cfg->ApiSecret, 0, 6) . '•••' . substr($cfg->ApiSecret, -2)
+                : '•••';
             
-            Log::channel('whatsapp')->info('WA Lihat Demo sent', ['phone' => $target]);
+            Log::channel('whatsapp')->info('Attempting WA Lihat Demo via Whapify', [
+                'phone' => $target,
+                'account' => $cfg->AccountUniqueId,
+                'secret_masked' => $maskedSecret,
+            ]);
+
+            // Use asMultipart() and include redundant fields matching sendWhatsappOrderCreated
+            $resp = Http::timeout(20)
+                ->asMultipart()
+                ->post('https://whapify.id/api/send/whatsapp', [
+                    'secret' => $cfg->ApiSecret,
+                    'account' => $cfg->AccountUniqueId,
+                    'accountUniqueId' => $cfg->AccountUniqueId,
+                    'recipient' => $target,
+                    'type' => 'text',
+                    'message' => $message,
+                    'text' => $message,
+                ]);
+            
+            // Detailed logging of response
+            $bodyText = $resp->body();
+            $json = null;
+            try { $json = json_decode($bodyText, true, 512, JSON_THROW_ON_ERROR); } catch (\Throwable $e) { $json = null; }
+            $logicalOk = $resp->ok();
+            $logicalStatus = $resp->status();
+            if (is_array($json)) {
+                if (isset($json['status']) && is_numeric($json['status'])) { $logicalStatus = (int)$json['status']; }
+                if (array_key_exists('data', $json)) { $logicalOk = $logicalOk && (bool)$json['data']; }
+            }
+
+            if ($logicalOk && $logicalStatus === 200) {
+                Log::channel('whatsapp')->info('WA Lihat Demo sent via Whapify', [
+                    'phone' => $target,
+                    'http' => $resp->status(),
+                    'account' => $cfg->AccountUniqueId,
+                ]);
+            } else {
+                Log::channel('whatsapp')->warning('WA Lihat Demo send failed via Whapify', [
+                    'status' => $resp->status(),
+                    'json_status' => is_array($json) ? ($json['status'] ?? null) : null,
+                    'body' => $bodyText,
+                ]);
+            }
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->warning('WA Lihat Demo exception', ['error' => $e->getMessage()]);
         }
