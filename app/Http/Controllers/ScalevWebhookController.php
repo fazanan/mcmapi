@@ -300,15 +300,15 @@ class ScalevWebhookController extends Controller
             } elseif ($event === 'order.created' && !empty($phone)) {
                 if ($productName && stripos($productName, 'LIHAT DEMO') !== false) {
                     $this->sendWhatsappLihatDemo($phone);
+                } else {
+                    // Normal behavior for other products (Payment Reminder)
+                    $this->sendWhatsappOrderCreated(
+                        $phone,
+                        $name,
+                        $productName,
+                        $variantPrice ?? $netRevenue
+                    );
                 }
-                
-                // Normal behavior for other products (Payment Reminder)
-                $this->sendWhatsappOrderCreated(
-                    $phone,
-                    $name,
-                    $productName,
-                    $variantPrice ?? $netRevenue
-                );
             }
 
             return response()->json([
