@@ -36,6 +36,8 @@
       <th>ActivationDate (UTC)</th>
       <th>ExpiresAt (UTC)</th>
       <th>MaxhineId</th>
+      <th>MaxSeatsShopee</th>
+      <th>UsedSeatsShopee</th>
       <th>Last Used</th>
     </tr>
   </thead>
@@ -70,6 +72,10 @@
           <div class="form-group col-md-3"><label>MaxVideo</label><input id="MaxVideo" type="number" min="0" class="form-control"></div>
           <div class="form-group col-md-3"><label>Status</label><input id="Status" class="form-control"></div>
         </div>
+        <div class="form-row">
+            <div class="form-group col-md-6"><label>MaxSeats Shopee</label><input id="MaxSeatsShopeeScrap" type="number" min="0" class="form-control"></div>
+            <div class="form-group col-md-6"><label>UsedSeats Shopee</label><input id="UsedSeatsShopeeScrap" type="number" min="0" class="form-control"></div>
+        </div>
         <div class="form-group"><label>Features</label><input id="Features" class="form-control" placeholder="comma separated"></div>
         <div class="form-row">
           <div class="form-group col-md-6"><label>ActivationDate (Local)</label><input id="ActivationDateLocal" type="datetime-local" class="form-control"></div>
@@ -90,7 +96,7 @@
   </div>
 </div>
 @push('scripts')
-<script src="/js/licenses.js?v=20251227b"></script>
+<script src="/js/licenses.js?v=20251230"></script>
 @endpush
 
 <div class="modal fade" id="createModal" tabindex="-1" role="dialog" aria-hidden="true">
@@ -115,6 +121,10 @@
           <div class="form-group col-md-4"><label>TenorDays</label><input id="C_TenorDays" type="number" min="0" class="form-control"></div>
           <div class="form-group col-md-4"><label>MaxSeats</label><input id="C_MaxSeats" type="number" min="0" class="form-control"></div>
           <div class="form-group col-md-4"><label>MaxVideo</label><input id="C_MaxVideo" type="number" min="0" class="form-control"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group col-md-6"><label>MaxSeats Shopee</label><input id="C_MaxSeatsShopeeScrap" type="number" min="0" class="form-control"></div>
+            <div class="form-group col-md-6"><label>UsedSeats Shopee</label><input id="C_UsedSeatsShopeeScrap" type="number" min="0" class="form-control"></div>
         </div>
         <div class="form-group"><label>Features</label><input id="C_Features" class="form-control"></div>
         <div class="form-row">

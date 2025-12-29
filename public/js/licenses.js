@@ -36,6 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
         `<td>${toUtcString(r.ActivationDate)}</td>` +
         `<td>${toUtcString(r.ExpiresAt)}</td>` +
         `<td>${r.MaxhineId || ''}</td>` +
+        `<td>${r.MaxSeatsShopeeScrap ?? ''}</td>` +
+        `<td>${r.UsedSeatsShopeeScrap ?? ''}</td>` +
         `<td>${toUtcString(r.LastUsed)}</td>`;
       tbody.appendChild(tr);
     }
@@ -80,6 +82,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('TenorDays').value = d.TenorDays ?? '';
     document.getElementById('MaxSeats').value = d.MaxSeats ?? '';
     document.getElementById('MaxVideo').value = d.MaxVideo ?? '';
+    document.getElementById('MaxSeatsShopeeScrap').value = d.MaxSeatsShopeeScrap ?? '';
+    document.getElementById('UsedSeatsShopeeScrap').value = d.UsedSeatsShopeeScrap ?? '';
     document.getElementById('Features').value = d.Features || '';
     document.getElementById('Status').value = d.Status || '';
     document.getElementById('IsActivated').checked = !!d.IsActivated;
@@ -105,6 +109,8 @@ document.addEventListener('DOMContentLoaded', () => {
       TenorDays: toIntOrNull(document.getElementById('TenorDays').value),
       MaxSeats: toIntOrNull(document.getElementById('MaxSeats').value),
       MaxVideo: toIntOrNull(document.getElementById('MaxVideo').value),
+      MaxSeatsShopeeScrap: toIntOrNull(document.getElementById('MaxSeatsShopeeScrap').value),
+      UsedSeatsShopeeScrap: toIntOrNull(document.getElementById('UsedSeatsShopeeScrap').value),
       Features: document.getElementById('Features').value || null,
       Status: document.getElementById('Status').value || null,
       IsActivated: document.getElementById('IsActivated').checked,
@@ -132,6 +138,8 @@ document.addEventListener('DOMContentLoaded', () => {
       TenorDays: toIntOrNull(document.getElementById('C_TenorDays').value),
       MaxSeats: toIntOrNull(document.getElementById('C_MaxSeats').value),
       MaxVideo: toIntOrNull(document.getElementById('C_MaxVideo').value),
+      MaxSeatsShopeeScrap: toIntOrNull(document.getElementById('C_MaxSeatsShopeeScrap').value),
+      UsedSeatsShopeeScrap: toIntOrNull(document.getElementById('C_UsedSeatsShopeeScrap').value),
       Features: document.getElementById('C_Features').value || null,
       ExpiresAtUtc: localInputToUtcIso(document.getElementById('C_ExpiresAtLocal').value),
       IsActivated: document.getElementById('C_IsActivated').checked,
