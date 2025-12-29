@@ -1395,3 +1395,90 @@ Route::match(['GET','POST'],'/test-whatsapp', function (Request $request) {
         'curlPreview' => $curlPreview,
     ]);
 })->middleware(['auth','role:admin']);
+
+// CRUD License Activations
+Route::get('/license-activations', function () {
+    return view('activations.index');
+})->middleware(['auth', 'role:admin']);
+
+Route::get('/api/license-activations', function (Request $request) {
+    $q = $request->query('q');
+    $query = \App\Models\LicenseActivationsPlugin::query();
+    
+    if ($q) {
+        $like = '%'.$q.'%';
+        $query->where(function ($sub) use ($like) {
+            $sub->where('product_name', 'like', $like)
+                ->orWhere('device_id', 'like', $like)
+                ->orWhere('license_id', 'like', $like);
+        });
+    }
+    
+    $rows = $query->orderByDesc('id')->limit(500)->get();
+    return response()->json($rows);
+})->middleware(['auth', 'role:admin']);
+
+Route::get('/api/license-activations/{id}', function ($id) {
+    $m = \App\Models\LicenseActivationsPlugin::find($id);
+    if (!$m) return response()->json(['message'=>'Not found'], 404);
+    return response()->json($m);
+})->middleware(['auth', 'role:admin']);
+
+Route::post('/api/license-activations', function (Request $request) {
+    $data = $request->validate([
+        'license_id' => 'required|integer',
+        'device_id' => 'required|string|max:36',
+        'product_name' => 'required|string|max:100',
+        'activated_at' => 'nullable|date',
+        'last_seen_at' => 'nullable|date',
+        'revoked' => 'boolean',
+    ]);
+    
+    try {
+        $m = \App\Models\LicenseActivationsPlugin::create([
+            'license_id' => $data['license_id'],
+            'device_id' => $data['device_id'],
+            'product_name' => $data['product_name'],
+            'activated_at' => $data['activated_at'] ?? now(),
+            'last_seen_at' => $data['last_seen_at'] ?? now(),
+            'revoked' => $data['revoked'] ?? false,
+        ]);
+        return response()->json($m, 201);
+    } catch (\Illuminate\Database\QueryException $e) {
+        if ($e->errorInfo[1] == 1062) { // Duplicate entry
+            return response()->json(['message' => 'Duplicate entry for license/device/product'], 409);
+        }
+        throw $e;
+    }
+})->middleware(['auth', 'role:admin']);
+
+Route::put('/api/license-activations/{id}', function ($id, Request $request) {
+    $m = \App\Models\LicenseActivationsPlugin::find($id);
+    if (!$m) return response()->json(['message'=>'Not found'], 404);
+    
+    $data = $request->validate([
+        'license_id' => 'integer',
+        'device_id' => 'string|max:36',
+        'product_name' => 'string|max:100',
+        'activated_at' => 'nullable|date',
+        'last_seen_at' => 'nullable|date',
+        'revoked' => 'boolean',
+    ]);
+    
+    try {
+        $m->update(array_filter($data, function($v) { return !is_null($v); }));
+        return response()->json($m);
+    } catch (\Illuminate\Database\QueryException $e) {
+        if ($e->errorInfo[1] == 1062) {
+            return response()->json(['message' => 'Duplicate entry for license/device/product'], 409);
+        }
+        throw $e;
+    }
+})->middleware(['auth', 'role:admin']);
+
+Route::delete('/api/license-activations/{id}', function ($id) {
+    $m = \App\Models\LicenseActivationsPlugin::find($id);
+    if (!$m) return response()->json(['message'=>'Not found'], 404);
+    $m->delete();
+    return response()->json(['ok' => true]);
+})->middleware(['auth', 'role:admin']);
