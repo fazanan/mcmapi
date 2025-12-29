@@ -181,6 +181,7 @@ Route::get('/api/customerlicense/{id}', function ($id) {
         'ActivationDate' => optional($m->activation_date_utc)->toISOString(),
         'ExpiresAt' => optional($m->expires_at_utc)->toISOString(),
         'MaxhineId' => $m->machine_id,
+        'DeviceId' => $m->device_id,
         'MaxSeats' => $m->max_seats,
         'MaxVideo' => $m->max_video,
         'MaxSeatsShopeeScrap' => $m->max_seats_shopee_scrap,
@@ -215,6 +216,7 @@ Route::post('/api/customerlicense', function (Request $request) {
         'expires_at_utc' => isset($data['ExpiresAtUtc']) && $data['ExpiresAtUtc'] ? $data['ExpiresAtUtc'] : null,
         'is_activated' => isset($data['IsActivated']) ? (bool)$data['IsActivated'] : false,
         'machine_id' => $data['MachineId'] ?? null,
+        'device_id' => $data['DeviceId'] ?? null,
         'status' => $statusInit,
     ]);
     return response()->json(['OrderId'=>$m->order_id,'LicenseKey'=>$m->license_key],201);
@@ -243,6 +245,7 @@ Route::put('/api/customerlicense/{id}', function ($id, Request $request) {
         'activation_date_utc' => isset($data['ActivationDateUtc']) && $data['ActivationDateUtc'] ? $data['ActivationDateUtc'] : $m->activation_date_utc,
         'expires_at_utc' => isset($data['ExpiresAtUtc']) && $data['ExpiresAtUtc'] ? $data['ExpiresAtUtc'] : $m->expires_at_utc,
         'machine_id' => $data['MachineId'] ?? $m->machine_id,
+        'device_id' => $data['DeviceId'] ?? $m->device_id,
     ]);
     $m->save();
     return response()->json(['ok'=>true]);

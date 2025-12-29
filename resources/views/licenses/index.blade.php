@@ -36,6 +36,7 @@
       <th>ActivationDate (UTC)</th>
       <th>ExpiresAt (UTC)</th>
       <th>MaxhineId</th>
+      <th>DeviceId</th>
       <th>MaxSeatsShopee</th>
       <th>UsedSeatsShopee</th>
       <th>Last Used</th>
@@ -83,7 +84,8 @@
         </div>
         <div class="form-row">
           <div class="form-group col-md-4"><div class="form-check mt-4"><input id="IsActivated" type="checkbox" class="form-check-input"><label class="form-check-label" for="IsActivated">Is Activated</label></div></div>
-          <div class="form-group col-md-8"><label>MaxhineId</label><input id="MachineId" class="form-control"></div>
+          <div class="form-group col-md-4"><label>MaxhineId</label><input id="MachineId" class="form-control"></div>
+          <div class="form-group col-md-4"><label>DeviceId</label><input id="DeviceId" class="form-control"></div>
         </div>
         <input type="hidden" id="RowVerBase64">
       </div>
@@ -131,7 +133,10 @@
           <div class="form-group col-md-6"><label>ExpiresAt (Local)</label><input id="C_ExpiresAtLocal" type="datetime-local" class="form-control"></div>
           <div class="form-group col-md-6"><div class="form-check mt-4"><input id="C_IsActivated" type="checkbox" class="form-check-input"><label class="form-check-label" for="C_IsActivated">Is Activated</label></div></div>
         </div>
-        <div class="form-group"><label>MachineId</label><input id="C_MachineId" class="form-control"></div>
+        <div class="form-row">
+            <div class="form-group col-md-6"><label>MachineId</label><input id="C_MachineId" class="form-control"></div>
+            <div class="form-group col-md-6"><label>DeviceId</label><input id="C_DeviceId" class="form-control"></div>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="submit" class="btn btn-success">Save</button>

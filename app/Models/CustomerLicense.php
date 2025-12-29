@@ -28,4 +28,9 @@ class CustomerLicense extends Model
     {
         return $this->hasMany(VoiceOverTransaction::class, 'license_id');
     }
+
+    public function licenseActivations()
+    {
+        return $this->hasMany(LicenseActivationsPlugin::class, 'license_id');
+    }
 }

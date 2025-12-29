@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `<td>${toUtcString(r.ActivationDate)}</td>` +
         `<td>${toUtcString(r.ExpiresAt)}</td>` +
         `<td>${r.MaxhineId || ''}</td>` +
+        `<td>${r.DeviceId || ''}</td>` +
         `<td>${r.MaxSeatsShopeeScrap ?? ''}</td>` +
         `<td>${r.UsedSeatsShopeeScrap ?? ''}</td>` +
         `<td>${toUtcString(r.LastUsed)}</td>`;
@@ -90,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('ActivationDateLocal').value = toLocalInputFromUtc(d.ActivationDate);
     document.getElementById('ExpiresAtLocal').value = toLocalInputFromUtc(d.ExpiresAt);
     document.getElementById('MachineId').value = d.MaxhineId || '';
+    document.getElementById('DeviceId').value = d.DeviceId || '';
     document.getElementById('RowVerBase64').value = d.RowVerBase64 || '';
   }
   document.getElementById('btnSearch').addEventListener('click', reload);
@@ -116,7 +118,8 @@ document.addEventListener('DOMContentLoaded', () => {
       IsActivated: document.getElementById('IsActivated').checked,
       ActivationDateUtc: localInputToUtcIso(document.getElementById('ActivationDateLocal').value),
       ExpiresAtUtc: localInputToUtcIso(document.getElementById('ExpiresAtLocal').value),
-      MachineId: document.getElementById('MachineId').value || null
+      MachineId: document.getElementById('MachineId').value || null,
+      DeviceId: document.getElementById('DeviceId').value || null
     };
     try { await api.update(orderId, payload); $('#editModal').modal('hide'); await reload(); } catch (err) { alert('Gagal menyimpan: ' + err.message); }
   });
@@ -143,7 +146,8 @@ document.addEventListener('DOMContentLoaded', () => {
       Features: document.getElementById('C_Features').value || null,
       ExpiresAtUtc: localInputToUtcIso(document.getElementById('C_ExpiresAtLocal').value),
       IsActivated: document.getElementById('C_IsActivated').checked,
-      MachineId: document.getElementById('C_MachineId').value || null
+      MachineId: document.getElementById('C_MachineId').value || null,
+      DeviceId: document.getElementById('C_DeviceId').value || null
     };
     try { await api.create(payload); $('#createModal').modal('hide'); await reload(); } catch (err) { alert('Gagal menambah license: ' + err.message); }
   });
