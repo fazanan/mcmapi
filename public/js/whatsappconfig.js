@@ -1,5 +1,9 @@
 function fmtIso(dt){return dt?new Date(dt).toLocaleString():''}
-async function api(url,method,body){const res=await fetch(url,{method:method||'GET',headers:{'Content-Type':'application/json','Accept':'application/json','X-Requested-With':'XMLHttpRequest'},body:body?JSON.stringify(body):undefined});const txt=await res.text();try{return{ok:res.ok,code:res.status,json:JSON.parse(txt)}}catch(e){return{ok:res.ok,code:res.status,text:txt}}}
+async function api(url,method,body){
+  const csrf=(document.querySelector('meta[name="csrf-token"]')?.content)||'';
+  const res=await fetch(url,{method:method||'GET',headers:{'Content-Type':'application/json','Accept':'application/json','X-Requested-With':'XMLHttpRequest','X-CSRF-TOKEN':csrf},body:body?JSON.stringify(body):undefined});
+  const txt=await res.text();try{return{ok:res.ok,code:res.status,json:JSON.parse(txt)}}catch(e){return{ok:res.ok,code:res.status,text:txt}}
+}
 function msg(t,ok){const el=document.getElementById('msg');el.className=ok?'text-success':'text-danger';el.textContent=t}
 let dt=null;let rows=[]
 async function reload(){const q=document.getElementById('txtSearch').value;const r=await api('/api/whatsappconfig'+(q?('?q='+encodeURIComponent(q)):''));if(!r.ok){return msg('Gagal load: '+(r.text||r.code),false)}rows=r.json||[];dt.clear().draw();rows.forEach(x=>{dt.row.add([

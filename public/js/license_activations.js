@@ -1,10 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
   const api = {
     list: q => fetch(`/api/license-activations${q ? ('?q=' + encodeURIComponent(q)) : ''}`).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); })),
     one: id => fetch(`/api/license-activations/${encodeURIComponent(id)}`).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); })),
-    create: payload => fetch(`/api/license-activations`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) }).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); })),
-    update: (id, payload) => fetch(`/api/license-activations/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) }).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); })),
-    del: id => fetch(`/api/license-activations/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } }).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
+    create: payload => fetch(`/api/license-activations`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': csrf }, body: JSON.stringify(payload) }).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); })),
+    update: (id, payload) => fetch(`/api/license-activations/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': csrf }, body: JSON.stringify(payload) }).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); })),
+    del: id => fetch(`/api/license-activations/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': csrf } }).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
   };
   
   let dt = null;
