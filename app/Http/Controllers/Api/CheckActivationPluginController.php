@@ -61,10 +61,15 @@ class CheckActivationPluginController extends Controller
             $license->last_used = Carbon::now();
             $license->save();
 
+            $usedSeats = LicenseActivationsPlugin::where('license_key', $licenseKey)->count();
+
             return response()->json([
                 'isValid' => true,
                 'message' => 'Activated.',
-                'activation' => $activation
+                'activation' => $activation,
+                'expiredAt' => $license->expires_at_utc,
+                'maxseatsshopee' => $license->max_seats_shopee_scrap,
+                'usedseatshopee' => $usedSeats
             ]);
         }
 
@@ -100,7 +105,11 @@ class CheckActivationPluginController extends Controller
         return response()->json([
             'isValid' => true,
             'message' => 'Activation successful.',
-            'activation' => $newActivation
+            'activation' => $newActivation,
+            'expiredAt' => $license->expires_at_utc,
+            'maxseatsshopee' => $license->max_seats_shopee_scrap,
+            'usedseatshopee' => $usedSeats + 1
+        ]);
         ]);
     }
 }
