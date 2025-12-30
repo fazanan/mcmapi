@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Exclude webhooks from CSRF protection
         $middleware->validateCsrfTokens(except: [
             'api/webhooks/*',
+            'api/check_activation_plugin',
         ]);
 
         // Register route middleware aliases
