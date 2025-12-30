@@ -28,6 +28,24 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::get('/licenses', function () { return view('licenses.index'); })->name('licenses.index');
     Route::get('/licenselogs', function () { return view('licenselogs.index'); })->name('licenselogs.index');
+    // Alias rute agar cocok dengan link di sidebar
+    Route::get('/license-logs', function () { return view('licenselogs.index'); });
+    Route::get('/license-activations', function () { return view('activations.index'); });
+    Route::get('/orders', function () { return view('orderdata.index'); });
+    Route::get('/config-keys', function () { return view('configapikey.index'); });
+    Route::get('/whatsapp-config', function () { return view('whatsappconfig.index'); });
+    // Debug & maintenance (sementara, aman karena di balik auth)
+    Route::get('/debug-routes', function () {
+        $list = [];
+        foreach (Route::getRoutes() as $r) { $list[] = $r->uri(); }
+        return response()->json($list);
+    });
+    Route::post('/artisan/route-clear', function () {
+        Artisan::call('route:clear');
+        Artisan::call('config:clear');
+        Artisan::call('view:clear');
+        return response()->json(['ok' => true, 'message' => 'route/config/view cache cleared']);
+    });
     Route::get('/users', function () {
         $users = \App\Models\User::query()->orderByDesc('created_at')->get();
         return view('users.index', ['users' => $users]);
