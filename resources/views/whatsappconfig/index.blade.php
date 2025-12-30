@@ -68,5 +68,5 @@
 @endsection
 
 @push('scripts')
-<script src="/js/whatsappconfig.js"></script>
+<script src="/js/whatsappconfig.js?v=20251230"></script>
 @endpush

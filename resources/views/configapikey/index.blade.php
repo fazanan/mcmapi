@@ -72,5 +72,5 @@
 @endsection
 
 @push('scripts')
-<script src="/js/configapikey.js"></script>
+<script src="/js/configapikey.js?v=20251230"></script>
 @endpush

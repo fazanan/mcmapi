@@ -9,6 +9,7 @@ use App\Http\Controllers\AuthController;
 use App\Models\CustomerLicense;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 Route::get('/', function () {
     return view('welcome');
@@ -357,27 +358,25 @@ Route::prefix('api')->group(function () {
         };
         $rows = collect();
         try {
-            $query = DB::table('OrderData')->orderByDesc('updated_at');
+            $query = DB::table('OrderData');
             if ($q) {
-                $query->where(function ($w) use ($q) {
-                    $w->where('order_id', 'like', "%$q%")
-                      ->orWhere('email', 'like', "%$q%")
-                      ->orWhere('phone', 'like', "%$q%")
-                      ->orWhere('name', 'like', "%$q%")
-                      ->orWhere('product_name', 'like', "%$q%");
+                $cols = [];
+                try { $cols = Schema::getColumnListing('OrderData'); } catch (\Throwable $e) {}
+                $fields = ['order_id','email','phone','name','product_name'];
+                $query->where(function ($w) use ($q, $cols, $fields) {
+                    foreach ($fields as $f) { if (in_array($f, $cols)) { $w->orWhere($f, 'like', "%$q%"); } }
                 });
             }
             $rows = $rows->concat($query->get()->map($mapRow));
         } catch (\Throwable $e) {}
         try {
-            $query2 = DB::table('orders')->orderByDesc('updated_at');
+            $query2 = DB::table('orders');
             if ($q) {
-                $query2->where(function ($w) use ($q) {
-                    $w->where('order_id', 'like', "%$q%")
-                      ->orWhere('email', 'like', "%$q%")
-                      ->orWhere('phone', 'like', "%$q%")
-                      ->orWhere('name', 'like', "%$q%")
-                      ->orWhere('product_name', 'like', "%$q%");
+                $cols2 = [];
+                try { $cols2 = Schema::getColumnListing('orders'); } catch (\Throwable $e) {}
+                $fields2 = ['order_id','email','phone','name','product_name'];
+                $query2->where(function ($w) use ($q, $cols2, $fields2) {
+                    foreach ($fields2 as $f) { if (in_array($f, $cols2)) { $w->orWhere($f, 'like', "%$q%"); } }
                 });
             }
             $rows = $rows->concat($query2->get()->map($mapRow));

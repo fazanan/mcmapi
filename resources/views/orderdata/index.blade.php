@@ -76,5 +76,5 @@
 @endsection
 
 @push('scripts')
-<script src="/js/orderdata.js"></script>
+<script src="/js/orderdata.js?v=20251230"></script>
 @endpush
