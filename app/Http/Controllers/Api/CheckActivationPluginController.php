@@ -110,6 +110,5 @@ class CheckActivationPluginController extends Controller
             'maxseatsshopee' => $license->max_seats_shopee_scrap,
             'usedseatshopee' => $usedSeats + 1
         ]);
-        ]);
     }
 }
