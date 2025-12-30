@@ -1482,3 +1482,88 @@ Route::delete('/api/license-activations/{id}', function ($id) {
     $m->delete();
     return response()->json(['ok' => true]);
 })->middleware(['auth', 'role:admin']);
+
+// API check_activation_plugin
+Route::post('/api/check_activation_plugin', function (Request $request) {
+    $licenseKey = $request->input('LicenseKey');
+    $deviceId = $request->input('DeviceId');
+    $productName = $request->input('ProductName');
+
+    if (!$licenseKey || !$deviceId || !$productName) {
+        return response()->json(['ok' => false, 'message' => 'Parameter tidak lengkap'], 400);
+    }
+
+    // 1. Cari data berdasarkan licensekey
+    $license = \App\Models\CustomerLicense::where('license_key', $licenseKey)->first();
+    if (!$license) {
+        return response()->json(['ok' => false, 'message' => 'License tidak ditemukan'], 404);
+    }
+
+    // 2. Cek column ExpiresAt
+    if ($license->expires_at_utc && \Illuminate\Support\Carbon::parse($license->expires_at_utc)->isPast()) {
+        return response()->json(['ok' => false, 'message' => 'License MCM expired'], 403);
+    }
+
+    // 3. Cek apakah kombinasi sudah ada
+    $activation = \App\Models\LicenseActivationsPlugin::where('license_id', $license->id)
+        ->where('device_id', $deviceId)
+        ->where('product_name', $productName)
+        ->first();
+
+    if ($activation) {
+        // Update last_seen_at
+        $activation->last_seen_at = now();
+        $activation->save();
+        
+        if ($activation->revoked) {
+             return response()->json(['ok' => false, 'message' => 'Akses perangkat ini telah dicabut.'], 403);
+        }
+
+        return response()->json(['ok' => true, 'message' => 'Sukses']);
+    }
+
+    // 4. Hitung jumlah device aktif saat ini
+    $activeCount = \App\Models\LicenseActivationsPlugin::where('license_id', $license->id)
+        ->where('product_name', $productName)
+        ->count();
+
+    // Mapping max seats berdasarkan nama produk jika perlu logika dinamis,
+    // tapi sesuai request kita pakai kolom max_seats_shopee_scrap
+    // Asumsi: ProductName 'shopee_video_scrap' menggunakan kuota max_seats_shopee_scrap.
+    // Jika produk lain, mungkin perlu logika lain. Untuk sekarang kita hardcode atau mapping sederhana.
+    
+    $maxSeats = 0;
+    if ($productName === 'shopee_video_scrap') {
+        $maxSeats = $license->max_seats_shopee_scrap ?? 0;
+    } else {
+        // Fallback atau default behavior jika ada produk lain nanti
+        // Misalnya default 1 atau ambil dari kolom lain
+        $maxSeats = 1; 
+    }
+
+    if ($activeCount < $maxSeats) {
+        // Insert device baru
+        try {
+            \App\Models\LicenseActivationsPlugin::create([
+                'license_id' => $license->id,
+                'device_id' => $deviceId,
+                'product_name' => $productName,
+                'activated_at' => now(),
+                'last_seen_at' => now(),
+                'revoked' => false
+            ]);
+            
+            // Update used_seats_shopee_scrap di tabel license jika produknya shopee_video_scrap
+            if ($productName === 'shopee_video_scrap') {
+                $license->used_seats_shopee_scrap = $activeCount + 1;
+                $license->save();
+            }
+
+            return response()->json(['ok' => true, 'message' => 'Sukses']);
+        } catch (\Exception $e) {
+            return response()->json(['ok' => false, 'message' => 'Gagal aktivasi: ' . $e->getMessage()], 500);
+        }
+    } else {
+        return response()->json(['ok' => false, 'message' => 'Kuota penuh, hubungi admin'], 403);
+    }
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
