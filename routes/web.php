@@ -42,6 +42,9 @@ Route::middleware('auth')->group(function () {
         foreach (Route::getRoutes() as $r) { $list[] = $r->uri(); }
         return response()->json($list);
     });
+    Route::get('/debug-tables', function () {
+        return response()->json(DB::select('SHOW TABLES'));
+    });
     Route::post('/artisan/route-clear', function () {
         Artisan::call('route:clear');
         Artisan::call('config:clear');
@@ -467,13 +470,13 @@ Route::prefix('api')->group(function () {
         $rows = $query->get()->map(function ($r) {
             $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
             return [
-                'Id' => $r->id,
-                'ApiSecret' => $r->api_secret,
-                'AccountUniqueId' => $r->account_unique_id,
-                'GroupLink' => $r->group_link,
-                'InstallerLink' => $r->installer_link,
-                'InstallerVersion' => $r->installer_version,
-                'UpdatedAt' => $toIso($r->updated_at),
+                'Id' => $r->id ?? $r->Id ?? null,
+                'ApiSecret' => $r->api_secret ?? $r->ApiSecret ?? null,
+                'AccountUniqueId' => $r->account_unique_id ?? $r->AccountUniqueId ?? null,
+                'GroupLink' => $r->group_link ?? $r->GroupLink ?? null,
+                'InstallerLink' => $r->installer_link ?? $r->InstallerLink ?? null,
+                'InstallerVersion' => $r->installer_version ?? $r->InstallerVersion ?? null,
+                'UpdatedAt' => $toIso($r->updated_at ?? $r->UpdatedAt ?? null),
             ];
         });
         return response()->json($rows);
@@ -483,13 +486,13 @@ Route::prefix('api')->group(function () {
         if (!$r) { return response()->json(['message' => 'Not found'], 404); }
         $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
         return response()->json([
-            'Id' => $r->id,
-            'ApiSecret' => $r->api_secret,
-            'AccountUniqueId' => $r->account_unique_id,
-            'GroupLink' => $r->group_link,
-            'InstallerLink' => $r->installer_link,
-            'InstallerVersion' => $r->installer_version,
-            'UpdatedAt' => $toIso($r->updated_at),
+            'Id' => $r->id ?? $r->Id ?? null,
+            'ApiSecret' => $r->api_secret ?? $r->ApiSecret ?? null,
+            'AccountUniqueId' => $r->account_unique_id ?? $r->AccountUniqueId ?? null,
+            'GroupLink' => $r->group_link ?? $r->GroupLink ?? null,
+            'InstallerLink' => $r->installer_link ?? $r->InstallerLink ?? null,
+            'InstallerVersion' => $r->installer_version ?? $r->InstallerVersion ?? null,
+            'UpdatedAt' => $toIso($r->updated_at ?? $r->UpdatedAt ?? null),
         ]);
     });
     Route::post('/whatsappconfig', function () {
