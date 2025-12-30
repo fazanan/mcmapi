@@ -1504,39 +1504,26 @@ Route::post('/api/check_activation_plugin', function (Request $request) {
         return response()->json(['ok' => false, 'message' => 'License MCM expired'], 403);
     }
 
-    // 3. Cek apakah kombinasi sudah ada
-    // Menggunakan license_key langsung
+    // 3. Cek apakah kombinasi sudah ada di log aktivasi
     $activation = \App\Models\LicenseActivationsPlugin::where('license_key', $licenseKey)
         ->where('device_id', $deviceId)
         ->where('product_name', $productName)
         ->first();
 
     if ($activation) {
-        // Update last_seen_at
-        $activation->last_seen_at = now();
-        $activation->save();
-        
         if ($activation->revoked) {
              return response()->json(['ok' => false, 'message' => 'Akses perangkat ini telah dicabut.'], 403);
         }
-
-        return response()->json(['ok' => true, 'message' => 'Sukses']);
-    }
-
-    // 4. Hitung jumlah device aktif saat ini
-    $activeCount = \App\Models\LicenseActivationsPlugin::where('license_key', $licenseKey)
-        ->where('product_name', $productName)
-        ->count();
-
-    // Mapping max seats
-    $maxSeats = 0;
-    if ($productName === 'shopee_video_scrap') {
-        $maxSeats = $license->max_seats_shopee_scrap ?? 0;
+        // Update last_seen_at
+        $activation->last_seen_at = now();
+        $activation->save();
     } else {
-        $maxSeats = 1; 
-    }
+        // Jika belum ada (aktivasi pertama kali untuk device ini), update license used_seats jadi 1
+        if ($productName === 'shopee_video_scrap') {
+            $license->used_seats_shopee_scrap = 1;
+            $license->save();
+        }
 
-    if ($activeCount < $maxSeats) {
         // Insert device baru
         try {
             \App\Models\LicenseActivationsPlugin::create([
@@ -1547,20 +1534,12 @@ Route::post('/api/check_activation_plugin', function (Request $request) {
                 'last_seen_at' => now(),
                 'revoked' => false
             ]);
-            
-            // Update used_seats_shopee_scrap di tabel license jika produknya shopee_video_scrap
-            if ($productName === 'shopee_video_scrap') {
-                $license->used_seats_shopee_scrap = $activeCount + 1;
-                $license->save();
-            }
-
-            return response()->json(['ok' => true, 'message' => 'Sukses']);
         } catch (\Exception $e) {
             return response()->json(['ok' => false, 'message' => 'Gagal aktivasi: ' . $e->getMessage()], 500);
         }
-    } else {
-        return response()->json(['ok' => false, 'message' => 'Kuota penuh, hubungi admin'], 403);
     }
+
+    return response()->json(['ok' => true, 'message' => 'Sukses']);
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 // CRUD Routes for License Activations Plugin (Admin Only)
