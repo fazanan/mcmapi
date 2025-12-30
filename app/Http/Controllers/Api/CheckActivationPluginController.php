@@ -68,6 +68,7 @@ class CheckActivationPluginController extends Controller
                 'message' => 'Activated.',
                 'activation' => $activation,
                 'expiredAt' => $license->expires_at_utc,
+                'expired_at' => optional($license->expires_at_utc)->toIso8601String(),
                 'maxseatsshopee' => $license->max_seats_shopee_scrap,
                 'usedseatshopee' => $usedSeats
             ]);
@@ -83,7 +84,8 @@ class CheckActivationPluginController extends Controller
                 'isValid' => false,
                 'message' => 'Max seats reached.',
                 'max_seats' => $maxSeats,
-                'used_seats' => $usedSeats
+                'used_seats' => $usedSeats,
+                'expired_at' => optional($license->expires_at_utc)->toIso8601String()
             ], 403);
         }
 
@@ -107,6 +109,7 @@ class CheckActivationPluginController extends Controller
             'message' => 'Activation successful.',
             'activation' => $newActivation,
             'expiredAt' => $license->expires_at_utc,
+            'expired_at' => optional($license->expires_at_utc)->toIso8601String(),
             'maxseatsshopee' => $license->max_seats_shopee_scrap,
             'usedseatshopee' => $usedSeats + 1
         ]);
