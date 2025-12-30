@@ -2,20 +2,31 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
+use App\Models\User;
+use App\Models\CustomerLicense;
 
 Route::get('/', function () {
     return view('welcome');
 });
 
-// Route sementara untuk fix database di server
-Route::get('/fix-migration-plugin', function () {
+// Route untuk cek status data
+Route::get('/check-db-status', function () {
     try {
-        Artisan::call('migrate:refresh', [
-            '--path' => '/database/migrations/2025_12_30_000004_create_license_activations_plugin_table.php',
-            '--force' => true
+        $userCount = User::count();
+        $licenseCount = CustomerLicense::count();
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Database check complete',
+            'data' => [
+                'users_count' => $userCount,
+                'customer_licenses_count' => $licenseCount
+            ]
         ]);
-        return "Migration Refreshed Successfully:\n" . Artisan::output();
     } catch (\Exception $e) {
-        return "Error: " . $e->getMessage();
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ], 500);
     }
 });
