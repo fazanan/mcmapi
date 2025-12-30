@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CheckActivationPluginController;
 use App\Http\Controllers\AuthController;
 use App\Models\CustomerLicense;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 Route::get('/', function () {
     return view('welcome');
@@ -27,6 +28,29 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::get('/licenses', function () { return view('licenses.index'); })->name('licenses.index');
     Route::get('/licenselogs', function () { return view('licenselogs.index'); })->name('licenselogs.index');
+    Route::get('/users', function () {
+        $users = \App\Models\User::query()->orderByDesc('created_at')->get();
+        return view('users.index', ['users' => $users]);
+    })->name('users.index');
+    Route::get('/produk', function () { return view('produk.index'); })->name('produk.index');
+    Route::get('/orderdata', function () { return view('orderdata.index'); })->name('orderdata.index');
+    Route::get('/activations', function () { return view('activations.index'); })->name('activations.index');
+    Route::get('/configapikey', function () { return view('configapikey.index'); })->name('configapikey.index');
+    Route::get('/whatsappconfig', function () { return view('whatsappconfig.index'); })->name('whatsappconfig.index');
+    Route::get('/test-whatsapp', function () {
+        $latest = DB::table('WhatsAppConfig')->orderByDesc('updated_at')->first();
+        $statusCfg = ['hasApiKey' => !!($latest && ($latest->api_secret ?? null))];
+        return view('testwhatsapp.index', [
+            'statusCfg' => $statusCfg,
+            'recipient' => null,
+            'message' => null,
+            'overrideSecret' => null,
+            'overrideAccount' => null,
+            'result' => null,
+            'curlPreview' => null,
+            'logTail' => [],
+        ]);
+    })->name('testwhatsapp.index');
 });
 
 // API Routes (Dipindah ke sini karena Laravel 11 defaultnya tidak ada routes/api.php jika installasi minim)
@@ -193,11 +217,246 @@ Route::prefix('api')->group(function () {
         $m->save();
         return response()->json(['ok' => true, 'seconds_remaining' => (int)$m->vo_seconds_remaining]);
     });
+
+    // OrderData API
+    Route::get('/orderdata', function () {
+        $q = request()->query('q');
+        $query = DB::table('OrderData')->orderByDesc('updated_at');
+        if ($q) {
+            $query->where(function ($w) use ($q) {
+                $w->where('order_id', 'like', "%$q%")
+                  ->orWhere('email', 'like', "%$q%")
+                  ->orWhere('phone', 'like', "%$q%")
+                  ->orWhere('name', 'like', "%$q%")
+                  ->orWhere('product_name', 'like', "%$q%");
+            });
+        }
+        $rows = $query->get()->map(function ($r) {
+            $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
+            return [
+                'OrderId' => $r->order_id,
+                'Email' => $r->email,
+                'Phone' => $r->phone,
+                'Name' => $r->name,
+                'ProductName' => $r->product_name,
+                'VariantPrice' => $r->variant_price,
+                'NetRevenue' => $r->net_revenue,
+                'Status' => $r->status,
+                'CreatedAt' => $toIso($r->created_at),
+                'UpdatedAt' => $toIso($r->updated_at),
+            ];
+        });
+        return response()->json($rows);
+    });
+    Route::get('/orderdata/{orderId}', function ($orderId) {
+        $r = DB::table('OrderData')->where('order_id', $orderId)->first();
+        if (!$r) { return response()->json(['message' => 'Not found'], 404); }
+        $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
+        return response()->json([
+            'OrderId' => $r->order_id,
+            'Email' => $r->email,
+            'Phone' => $r->phone,
+            'Name' => $r->name,
+            'ProductName' => $r->product_name,
+            'VariantPrice' => $r->variant_price,
+            'NetRevenue' => $r->net_revenue,
+            'Status' => $r->status,
+            'CreatedAt' => $toIso($r->created_at),
+            'UpdatedAt' => $toIso($r->updated_at),
+        ]);
+    });
+    Route::post('/orderdata', function () {
+        $p = request()->json()->all();
+        $now = \Illuminate\Support\Carbon::now('UTC');
+        DB::table('OrderData')->insert([
+            'order_id' => $p['OrderId'] ?? ('ORD-' . Str::upper(Str::random(8))),
+            'email' => $p['Email'] ?? null,
+            'phone' => $p['Phone'] ?? null,
+            'name' => $p['Name'] ?? null,
+            'product_name' => $p['ProductName'] ?? null,
+            'variant_price' => $p['VariantPrice'] ?? null,
+            'net_revenue' => $p['NetRevenue'] ?? null,
+            'status' => $p['Status'] ?? 'Not Paid',
+            'created_at' => $p['CreatedAtUtc'] ?? $now,
+            'updated_at' => $now,
+        ]);
+        return response()->json(['ok' => true]);
+    });
+    Route::put('/orderdata/{orderId}', function ($orderId) {
+        $p = request()->json()->all();
+        $now = \Illuminate\Support\Carbon::now('UTC');
+        $aff = DB::table('OrderData')->where('order_id', $orderId)->update([
+            'email' => $p['Email'] ?? DB::raw('email'),
+            'phone' => $p['Phone'] ?? DB::raw('phone'),
+            'name' => $p['Name'] ?? DB::raw('name'),
+            'product_name' => $p['ProductName'] ?? DB::raw('product_name'),
+            'variant_price' => $p['VariantPrice'] ?? DB::raw('variant_price'),
+            'net_revenue' => $p['NetRevenue'] ?? DB::raw('net_revenue'),
+            'status' => $p['Status'] ?? DB::raw('status'),
+            'created_at' => $p['CreatedAtUtc'] ?? DB::raw('created_at'),
+            'updated_at' => $now,
+        ]);
+        if ($aff < 1) { return response()->json(['message' => 'Not found'], 404); }
+        return response()->json(['ok' => true]);
+    });
+    Route::delete('/orderdata/{orderId}', function ($orderId) {
+        $aff = DB::table('OrderData')->where('order_id', $orderId)->delete();
+        if ($aff < 1) { return response()->json(['message' => 'Not found'], 404); }
+        return response()->json(['ok' => true]);
+    });
+
+    // WhatsAppConfig API
+    Route::get('/whatsappconfig', function () {
+        $q = request()->query('q');
+        $query = DB::table('WhatsAppConfig')->orderByDesc('updated_at');
+        if ($q) {
+            $query->where(function ($w) use ($q) {
+                $w->where('api_secret', 'like', "%$q%")
+                  ->orWhere('account_unique_id', 'like', "%$q%");
+            });
+        }
+        $rows = $query->get()->map(function ($r) {
+            $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
+            return [
+                'Id' => $r->id,
+                'ApiSecret' => $r->api_secret,
+                'AccountUniqueId' => $r->account_unique_id,
+                'GroupLink' => $r->group_link,
+                'InstallerLink' => $r->installer_link,
+                'InstallerVersion' => $r->installer_version,
+                'UpdatedAt' => $toIso($r->updated_at),
+            ];
+        });
+        return response()->json($rows);
+    });
+    Route::get('/whatsappconfig/{id}', function ($id) {
+        $r = DB::table('WhatsAppConfig')->where('id', $id)->first();
+        if (!$r) { return response()->json(['message' => 'Not found'], 404); }
+        $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
+        return response()->json([
+            'Id' => $r->id,
+            'ApiSecret' => $r->api_secret,
+            'AccountUniqueId' => $r->account_unique_id,
+            'GroupLink' => $r->group_link,
+            'InstallerLink' => $r->installer_link,
+            'InstallerVersion' => $r->installer_version,
+            'UpdatedAt' => $toIso($r->updated_at),
+        ]);
+    });
+    Route::post('/whatsappconfig', function () {
+        $p = request()->json()->all();
+        $now = \Illuminate\Support\Carbon::now('UTC');
+        $id = DB::table('WhatsAppConfig')->insertGetId([
+            'api_secret' => $p['ApiSecret'] ?? null,
+            'account_unique_id' => $p['AccountUniqueId'] ?? null,
+            'group_link' => $p['GroupLink'] ?? null,
+            'installer_link' => $p['InstallerLink'] ?? null,
+            'installer_version' => $p['InstallerVersion'] ?? null,
+            'updated_at' => $now,
+        ]);
+        return response()->json(['ok' => true, 'Id' => $id]);
+    });
+    Route::put('/whatsappconfig/{id}', function ($id) {
+        $p = request()->json()->all();
+        $now = \Illuminate\Support\Carbon::now('UTC');
+        $aff = DB::table('WhatsAppConfig')->where('id', $id)->update([
+            'api_secret' => $p['ApiSecret'] ?? DB::raw('api_secret'),
+            'account_unique_id' => $p['AccountUniqueId'] ?? DB::raw('account_unique_id'),
+            'group_link' => $p['GroupLink'] ?? DB::raw('group_link'),
+            'installer_link' => $p['InstallerLink'] ?? DB::raw('installer_link'),
+            'installer_version' => $p['InstallerVersion'] ?? DB::raw('installer_version'),
+            'updated_at' => $now,
+        ]);
+        if ($aff < 1) { return response()->json(['message' => 'Not found'], 404); }
+        return response()->json(['ok' => true]);
+    });
+    Route::delete('/whatsappconfig/{id}', function ($id) {
+        $aff = DB::table('WhatsAppConfig')->where('id', $id)->delete();
+        if ($aff < 1) { return response()->json(['message' => 'Not found'], 404); }
+        return response()->json(['ok' => true]);
+    });
+
+    // ConfigApiKey API
+    Route::get('/configapikey', function () {
+        $q = request()->query('q');
+        $query = DB::table('ConfigApiKey')->orderByDesc('updated_at');
+        if ($q) {
+            $query->where(function ($w) use ($q) {
+                $w->where('provider', 'like', "%$q%")
+                  ->orWhere('api_key', 'like', "%$q%")
+                  ->orWhere('model', 'like', "%$q%")
+                  ->orWhere('status', 'like', "%$q%");
+            });
+        }
+        $rows = $query->get()->map(function ($r) {
+            $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
+            return [
+                'ApiKeyId' => $r->api_key_id ?? $r->id ?? null,
+                'JenisApiKey' => $r->provider,
+                'ApiKey' => $r->api_key,
+                'Model' => $r->model,
+                'DefaultVoiceId' => $r->default_voice_id,
+                'Status' => $r->status,
+                'CooldownUntilPT' => $toIso($r->cooldown_until),
+                'UpdatedAt' => $toIso($r->updated_at),
+            ];
+        });
+        return response()->json($rows);
+    });
+    Route::get('/configapikey/{id}', function ($id) {
+        $r = DB::table('ConfigApiKey')->where(function($q) use ($id){ $q->where('api_key_id', $id)->orWhere('id', $id); })->first();
+        if (!$r) { return response()->json(['message' => 'Not found'], 404); }
+        $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
+        return response()->json([
+            'ApiKeyId' => $r->api_key_id ?? $r->id ?? null,
+            'JenisApiKey' => $r->provider,
+            'ApiKey' => $r->api_key,
+            'Model' => $r->model,
+            'DefaultVoiceId' => $r->default_voice_id,
+            'Status' => $r->status,
+            'CooldownUntilPT' => $toIso($r->cooldown_until),
+            'UpdatedAt' => $toIso($r->updated_at),
+        ]);
+    });
+    Route::post('/configapikey', function () {
+        $p = request()->json()->all();
+        $now = \Illuminate\Support\Carbon::now('UTC');
+        $id = DB::table('ConfigApiKey')->insertGetId([
+            'provider' => $p['JenisApiKey'] ?? null,
+            'api_key' => $p['ApiKey'] ?? null,
+            'model' => $p['Model'] ?? null,
+            'default_voice_id' => $p['DefaultVoiceId'] ?? null,
+            'status' => $p['Status'] ?? 'AVAILABLE',
+            'cooldown_until' => $p['CooldownUntilPT'] ?? null,
+            'updated_at' => $now,
+        ]);
+        return response()->json(['ok' => true, 'ApiKeyId' => $id]);
+    });
+    Route::put('/configapikey/{id}', function ($id) {
+        $p = request()->json()->all();
+        $now = \Illuminate\Support\Carbon::now('UTC');
+        $aff = DB::table('ConfigApiKey')->where(function($q) use ($id){ $q->where('api_key_id', $id)->orWhere('id', $id); })->update([
+            'provider' => $p['JenisApiKey'] ?? DB::raw('provider'),
+            'api_key' => $p['ApiKey'] ?? DB::raw('api_key'),
+            'model' => $p['Model'] ?? DB::raw('model'),
+            'default_voice_id' => $p['DefaultVoiceId'] ?? DB::raw('default_voice_id'),
+            'status' => $p['Status'] ?? DB::raw('status'),
+            'cooldown_until' => $p['CooldownUntilPT'] ?? DB::raw('cooldown_until'),
+            'updated_at' => $now,
+        ]);
+        if ($aff < 1) { return response()->json(['message' => 'Not found'], 404); }
+        return response()->json(['ok' => true]);
+    });
+    Route::delete('/configapikey/{id}', function ($id) {
+        $aff = DB::table('ConfigApiKey')->where(function($q) use ($id){ $q->where('api_key_id', $id)->orWhere('id', $id); })->delete();
+        if ($aff < 1) { return response()->json(['message' => 'Not found'], 404); }
+        return response()->json(['ok' => true]);
+    });
 });
 
 // Remove require auth.php as it does not exist
 // require __DIR__.'/auth.php';
-
+ 
 Route::get('/debug-tables', function () {
     $tables = \Illuminate\Support\Facades\DB::select('SHOW TABLES');
     return response()->json($tables);
