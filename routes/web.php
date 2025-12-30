@@ -5,6 +5,7 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Artisan;
 use App\Http\Controllers\Api\CheckActivationController;
 use App\Http\Controllers\Api\CheckActivationPluginController;
+use App\Http\Controllers\ScalevWebhookController;
 use App\Http\Controllers\AuthController;
 use App\Models\CustomerLicense;
 use Illuminate\Support\Str;
@@ -57,7 +58,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/configapikey', function () { return view('configapikey.index'); })->name('configapikey.index');
     Route::get('/whatsappconfig', function () { return view('whatsappconfig.index'); })->name('whatsappconfig.index');
     Route::get('/test-whatsapp', function () {
-        $latest = DB::table('WhatsAppConfig')->orderByDesc('updated_at')->first();
+        $q = DB::table('WhatsAppConfig');
+        if (Schema::hasColumn('WhatsAppConfig', 'updated_at')) {
+            $q->orderByDesc('updated_at');
+        }
+        $latest = $q->first();
         $statusCfg = ['hasApiKey' => !!($latest && ($latest->api_secret ?? null))];
         return view('testwhatsapp.index', [
             'statusCfg' => $statusCfg,
@@ -75,6 +80,7 @@ Route::middleware('auth')->group(function () {
 // API Routes (Dipindah ke sini karena Laravel 11 defaultnya tidak ada routes/api.php jika installasi minim)
 // Atau jika ingin tetap dipisah, pastikan install api:install
 Route::prefix('api')->group(function () {
+    Route::post('/webhooks/scalev', [ScalevWebhookController::class, 'handle']);
     Route::post('/check_activation', [CheckActivationController::class, 'checkActivation']);
     Route::post('/check_activation_plugin', [CheckActivationPluginController::class, 'checkActivation']);
     Route::get('/customerlicense', function () {
@@ -448,7 +454,10 @@ Route::prefix('api')->group(function () {
     // WhatsAppConfig API
     Route::get('/whatsappconfig', function () {
         $q = request()->query('q');
-        $query = DB::table('WhatsAppConfig')->orderByDesc('updated_at');
+        $query = DB::table('WhatsAppConfig');
+        if (Schema::hasColumn('WhatsAppConfig', 'updated_at')) {
+            $query->orderByDesc('updated_at');
+        }
         if ($q) {
             $query->where(function ($w) use ($q) {
                 $w->where('api_secret', 'like', "%$q%")
@@ -519,7 +528,10 @@ Route::prefix('api')->group(function () {
     // ConfigApiKey API
     Route::get('/configapikey', function () {
         $q = request()->query('q');
-        $query = DB::table('ConfigApiKey')->orderByDesc('updated_at');
+        $query = DB::table('ConfigApiKey');
+        if (Schema::hasColumn('ConfigApiKey', 'updated_at')) {
+            $query->orderByDesc('updated_at');
+        }
         if ($q) {
             $query->where(function ($w) use ($q) {
                 $w->where('provider', 'like', "%$q%")
