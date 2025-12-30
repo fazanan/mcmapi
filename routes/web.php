@@ -337,48 +337,73 @@ Route::prefix('api')->group(function () {
     // OrderData API
     Route::get('/orderdata', function () {
         $q = request()->query('q');
-        $query = DB::table('OrderData')->orderByDesc('updated_at');
-        if ($q) {
-            $query->where(function ($w) use ($q) {
-                $w->where('order_id', 'like', "%$q%")
-                  ->orWhere('email', 'like', "%$q%")
-                  ->orWhere('phone', 'like', "%$q%")
-                  ->orWhere('name', 'like', "%$q%")
-                  ->orWhere('product_name', 'like', "%$q%");
-            });
-        }
-        $rows = $query->get()->map(function ($r) {
-            $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
+        $toIso = function ($v) { 
+            try { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; } 
+            catch (\Throwable $e) { return null; } 
+        };
+        $mapRow = function ($r) use ($toIso) {
             return [
-                'OrderId' => $r->order_id,
-                'Email' => $r->email,
-                'Phone' => $r->phone,
-                'Name' => $r->name,
-                'ProductName' => $r->product_name,
-                'VariantPrice' => $r->variant_price,
-                'NetRevenue' => $r->net_revenue,
-                'Status' => $r->status,
-                'CreatedAt' => $toIso($r->created_at),
-                'UpdatedAt' => $toIso($r->updated_at),
+                'OrderId' => $r->order_id ?? $r->OrderId ?? null,
+                'Email' => $r->email ?? $r->Email ?? null,
+                'Phone' => $r->phone ?? $r->Phone ?? null,
+                'Name' => $r->name ?? $r->Name ?? null,
+                'ProductName' => $r->product_name ?? $r->ProductName ?? null,
+                'VariantPrice' => $r->variant_price ?? $r->VariantPrice ?? null,
+                'NetRevenue' => $r->net_revenue ?? $r->NetRevenue ?? null,
+                'Status' => $r->status ?? $r->Status ?? null,
+                'CreatedAt' => $toIso($r->created_at ?? $r->CreatedAt ?? null),
+                'UpdatedAt' => $toIso($r->updated_at ?? $r->UpdatedAt ?? null),
             ];
-        });
-        return response()->json($rows);
+        };
+        $rows = collect();
+        try {
+            $query = DB::table('OrderData')->orderByDesc('updated_at');
+            if ($q) {
+                $query->where(function ($w) use ($q) {
+                    $w->where('order_id', 'like', "%$q%")
+                      ->orWhere('email', 'like', "%$q%")
+                      ->orWhere('phone', 'like', "%$q%")
+                      ->orWhere('name', 'like', "%$q%")
+                      ->orWhere('product_name', 'like', "%$q%");
+                });
+            }
+            $rows = $rows->concat($query->get()->map($mapRow));
+        } catch (\Throwable $e) {}
+        try {
+            $query2 = DB::table('orders')->orderByDesc('updated_at');
+            if ($q) {
+                $query2->where(function ($w) use ($q) {
+                    $w->where('order_id', 'like', "%$q%")
+                      ->orWhere('email', 'like', "%$q%")
+                      ->orWhere('phone', 'like', "%$q%")
+                      ->orWhere('name', 'like', "%$q%")
+                      ->orWhere('product_name', 'like', "%$q%");
+                });
+            }
+            $rows = $rows->concat($query2->get()->map($mapRow));
+        } catch (\Throwable $e) {}
+        return response()->json($rows->values());
     });
     Route::get('/orderdata/{orderId}', function ($orderId) {
-        $r = DB::table('OrderData')->where('order_id', $orderId)->first();
+        $toIso = function ($v) { 
+            try { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; } 
+            catch (\Throwable $e) { return null; } 
+        };
+        $r = null;
+        try { $r = DB::table('OrderData')->where('order_id', $orderId)->first(); } catch (\Throwable $e) {}
+        if (!$r) { try { $r = DB::table('orders')->where('order_id', $orderId)->first(); } catch (\Throwable $e) {} }
         if (!$r) { return response()->json(['message' => 'Not found'], 404); }
-        $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
         return response()->json([
-            'OrderId' => $r->order_id,
-            'Email' => $r->email,
-            'Phone' => $r->phone,
-            'Name' => $r->name,
-            'ProductName' => $r->product_name,
-            'VariantPrice' => $r->variant_price,
-            'NetRevenue' => $r->net_revenue,
-            'Status' => $r->status,
-            'CreatedAt' => $toIso($r->created_at),
-            'UpdatedAt' => $toIso($r->updated_at),
+            'OrderId' => $r->order_id ?? null,
+            'Email' => $r->email ?? null,
+            'Phone' => $r->phone ?? null,
+            'Name' => $r->name ?? null,
+            'ProductName' => $r->product_name ?? null,
+            'VariantPrice' => $r->variant_price ?? null,
+            'NetRevenue' => $r->net_revenue ?? null,
+            'Status' => $r->status ?? null,
+            'CreatedAt' => $toIso($r->created_at ?? null),
+            'UpdatedAt' => $toIso($r->updated_at ?? null),
         ]);
     });
     Route::post('/orderdata', function () {
