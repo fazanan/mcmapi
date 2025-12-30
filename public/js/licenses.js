@@ -8,8 +8,23 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   let dt = null;
   function pad(n) { return (n < 10 ? '0' : '') + n; }
-  function toUtcString(isoUtc) { if (!isoUtc) return ''; const s = isoUtc.endsWith('Z') ? isoUtc : isoUtc + 'Z'; const d = new Date(s); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`; }
-  function toLocalInputFromUtc(isoUtc) { if (!isoUtc) return ''; const s = isoUtc.endsWith('Z') ? isoUtc : isoUtc + 'Z'; const d = new Date(s); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`; }
+  function toUtcString(isoUtc) { 
+    if (!isoUtc) return ''; 
+    let s = isoUtc;
+    // Jika belum ada Z dan belum ada offset (+00:00), anggap UTC dengan tambah Z
+    if (!s.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(s)) { s += 'Z'; }
+    const d = new Date(s); 
+    if (isNaN(d.getTime())) return isoUtc;
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`; 
+  }
+  function toLocalInputFromUtc(isoUtc) { 
+    if (!isoUtc) return ''; 
+    let s = isoUtc;
+    if (!s.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(s)) { s += 'Z'; }
+    const d = new Date(s); 
+    if (isNaN(d.getTime())) return '';
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`; 
+  }
   function localInputToUtcIso(localVal) { if (!localVal) return null; const d = new Date(localVal); return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), 0, 0)).toISOString(); }
   function toIntOrNull(v) { if (v == null || v === '') return null; const n = parseInt(v, 10); return isNaN(n) ? null : n; }
   async function renderRows(rows) {
