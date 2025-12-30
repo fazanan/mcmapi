@@ -1505,7 +1505,8 @@ Route::post('/api/check_activation_plugin', function (Request $request) {
     }
 
     // 3. Cek apakah kombinasi sudah ada
-    $activation = \App\Models\LicenseActivationsPlugin::where('license_id', $license->id)
+    // Menggunakan license_key langsung
+    $activation = \App\Models\LicenseActivationsPlugin::where('license_key', $licenseKey)
         ->where('device_id', $deviceId)
         ->where('product_name', $productName)
         ->first();
@@ -1523,21 +1524,15 @@ Route::post('/api/check_activation_plugin', function (Request $request) {
     }
 
     // 4. Hitung jumlah device aktif saat ini
-    $activeCount = \App\Models\LicenseActivationsPlugin::where('license_id', $license->id)
+    $activeCount = \App\Models\LicenseActivationsPlugin::where('license_key', $licenseKey)
         ->where('product_name', $productName)
         ->count();
 
-    // Mapping max seats berdasarkan nama produk jika perlu logika dinamis,
-    // tapi sesuai request kita pakai kolom max_seats_shopee_scrap
-    // Asumsi: ProductName 'shopee_video_scrap' menggunakan kuota max_seats_shopee_scrap.
-    // Jika produk lain, mungkin perlu logika lain. Untuk sekarang kita hardcode atau mapping sederhana.
-    
+    // Mapping max seats
     $maxSeats = 0;
     if ($productName === 'shopee_video_scrap') {
         $maxSeats = $license->max_seats_shopee_scrap ?? 0;
     } else {
-        // Fallback atau default behavior jika ada produk lain nanti
-        // Misalnya default 1 atau ambil dari kolom lain
         $maxSeats = 1; 
     }
 
@@ -1545,7 +1540,7 @@ Route::post('/api/check_activation_plugin', function (Request $request) {
         // Insert device baru
         try {
             \App\Models\LicenseActivationsPlugin::create([
-                'license_id' => $license->id,
+                'license_key' => $licenseKey,
                 'device_id' => $deviceId,
                 'product_name' => $productName,
                 'activated_at' => now(),
@@ -1567,3 +1562,58 @@ Route::post('/api/check_activation_plugin', function (Request $request) {
         return response()->json(['ok' => false, 'message' => 'Kuota penuh, hubungi admin'], 403);
     }
 })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+// CRUD Routes for License Activations Plugin (Admin Only)
+Route::middleware(['auth', 'role:admin'])->group(function () {
+    Route::get('/api/license-activations', function (Request $request) {
+        $q = $request->input('q');
+        $query = \App\Models\LicenseActivationsPlugin::query();
+        if ($q) {
+            $query->where('license_key', 'like', "%$q%")
+                  ->orWhere('device_id', 'like', "%$q%")
+                  ->orWhere('product_name', 'like', "%$q%");
+        }
+        return $query->orderBy('id', 'desc')->take(100)->get();
+    });
+
+    Route::get('/api/license-activations/{id}', function ($id) {
+        return \App\Models\LicenseActivationsPlugin::findOrFail($id);
+    });
+
+    Route::post('/api/license-activations', function (Request $request) {
+        $data = $request->validate([
+            'license_key' => 'required|string',
+            'device_id' => 'required|string|max:36',
+            'product_name' => 'required|string|max:100',
+            'revoked' => 'boolean',
+            'activated_at' => 'nullable|date',
+            'last_seen_at' => 'nullable|date',
+        ]);
+        
+        // Defaults if not provided
+        if (!isset($data['activated_at'])) $data['activated_at'] = now();
+        if (!isset($data['last_seen_at'])) $data['last_seen_at'] = now();
+        if (!isset($data['revoked'])) $data['revoked'] = false;
+
+        return \App\Models\LicenseActivationsPlugin::create($data);
+    });
+
+    Route::put('/api/license-activations/{id}', function (Request $request, $id) {
+        $m = \App\Models\LicenseActivationsPlugin::findOrFail($id);
+        $data = $request->validate([
+            'license_key' => 'string',
+            'device_id' => 'string|max:36',
+            'product_name' => 'string|max:100',
+            'revoked' => 'boolean',
+            'activated_at' => 'nullable|date',
+            'last_seen_at' => 'nullable|date',
+        ]);
+        $m->update($data);
+        return $m;
+    });
+
+    Route::delete('/api/license-activations/{id}', function ($id) {
+        \App\Models\LicenseActivationsPlugin::findOrFail($id)->delete();
+        return response()->json(['ok' => true]);
+    });
+});

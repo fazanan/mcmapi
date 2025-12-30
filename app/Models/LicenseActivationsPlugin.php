@@ -12,7 +12,7 @@ class LicenseActivationsPlugin extends Model
     protected $table = 'license_activations_plugin';
 
     protected $fillable = [
-        'license_id',
+        'license_key',
         'device_id',
         'product_name',
         'activated_at',
@@ -30,6 +30,6 @@ class LicenseActivationsPlugin extends Model
 
     public function license()
     {
-        return $this->belongsTo(CustomerLicense::class, 'license_id');
+        return $this->belongsTo(CustomerLicense::class, 'license_key', 'license_key');
     }
 }

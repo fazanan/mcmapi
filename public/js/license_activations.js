@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tr.innerHTML =
         `<td><div class="btn-group btn-group-sm"><button class="btn btn-primary btn-edit" data-id="${r.id}">Edit</button><button class="btn btn-outline-danger btn-del" data-id="${r.id}">Del</button></div></td>` +
         `<td>${r.id}</td>` +
-        `<td>${r.license_id}</td>` +
+        `<td>${r.license_key}</td>` +
         `<td>${r.device_id}</td>` +
         `<td>${r.product_name}</td>` +
         `<td>${toUtcString(r.activated_at)}</td>` +
@@ -48,9 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await api.del(id);
             await reload();
-        } catch(e) {
-            alert('Gagal menghapus: ' + e.message);
-        }
+        } catch(e) { alert('Gagal hapus: ' + e.message); }
     }
   });
 
@@ -58,29 +56,33 @@ document.addEventListener('DOMContentLoaded', () => {
   
   function fillForm(d) {
     document.getElementById('ActivationId').value = d.id;
-    document.getElementById('LicenseId').value = d.license_id;
+    document.getElementById('LicenseKey').value = d.license_key;
     document.getElementById('DeviceId').value = d.device_id;
     document.getElementById('ProductName').value = d.product_name;
+    document.getElementById('chkRevoked').checked = d.revoked;
     document.getElementById('ActivatedAtLocal').value = toLocalInputFromUtc(d.activated_at);
     document.getElementById('LastSeenAtLocal').value = toLocalInputFromUtc(d.last_seen_at);
-    document.getElementById('Revoked').checked = !!d.revoked;
   }
 
   document.getElementById('btnSearch').addEventListener('click', reload);
   document.getElementById('btnReload').addEventListener('click', () => { document.getElementById('txtSearch').value = ''; reload(); });
 
-  document.getElementById('frmEdit').addEventListener('submit', async e => {
+  document.getElementById('frmEdit').addEventListener('submit', async function(e) {
     e.preventDefault();
     const id = document.getElementById('ActivationId').value;
     const payload = {
-      license_id: toIntOrNull(document.getElementById('LicenseId').value),
-      device_id: document.getElementById('DeviceId').value,
-      product_name: document.getElementById('ProductName').value,
-      activated_at: localInputToUtcIso(document.getElementById('ActivatedAtLocal').value),
-      last_seen_at: localInputToUtcIso(document.getElementById('LastSeenAtLocal').value),
-      revoked: document.getElementById('Revoked').checked
+        license_key: document.getElementById('LicenseKey').value,
+        device_id: document.getElementById('DeviceId').value,
+        product_name: document.getElementById('ProductName').value,
+        revoked: document.getElementById('chkRevoked').checked,
+        activated_at: localInputToUtcIso(document.getElementById('ActivatedAtLocal').value),
+        last_seen_at: localInputToUtcIso(document.getElementById('LastSeenAtLocal').value)
     };
-    try { await api.update(id, payload); $('#editModal').modal('hide'); await reload(); } catch (err) { alert('Gagal menyimpan: ' + err.message); }
+    try {
+        await api.update(id, payload);
+        $('#editModal').modal('hide');
+        await reload();
+    } catch(ex) { alert('Error: ' + ex.message); }
   });
 
   document.getElementById('btnDelete').addEventListener('click', async () => {
@@ -89,19 +91,28 @@ document.addEventListener('DOMContentLoaded', () => {
     if (confirm(`Delete ID ${id}?`)) { await api.del(id); $('#editModal').modal('hide'); await reload(); }
   });
 
-  document.getElementById('btnAdd').addEventListener('click', () => { document.getElementById('frmCreate').reset(); $('#createModal').modal('show'); });
-  
-  document.getElementById('frmCreate').addEventListener('submit', async e => {
+  document.getElementById('btnAdd').addEventListener('click', () => {
+    document.getElementById('frmCreate').reset();
+    document.getElementById('NewActivatedAtLocal').value = toLocalInputFromUtc(new Date().toISOString());
+    document.getElementById('NewLastSeenAtLocal').value = toLocalInputFromUtc(new Date().toISOString());
+    $('#createModal').modal('show');
+  });
+
+  document.getElementById('frmCreate').addEventListener('submit', async function(e) {
     e.preventDefault();
     const payload = {
-      license_id: toIntOrNull(document.getElementById('C_LicenseId').value),
-      device_id: document.getElementById('C_DeviceId').value,
-      product_name: document.getElementById('C_ProductName').value,
-      activated_at: localInputToUtcIso(document.getElementById('C_ActivatedAtLocal').value),
-      last_seen_at: localInputToUtcIso(document.getElementById('C_LastSeenAtLocal').value),
-      revoked: document.getElementById('C_Revoked').checked
+        license_key: document.getElementById('NewLicenseKey').value,
+        device_id: document.getElementById('NewDeviceId').value,
+        product_name: document.getElementById('NewProductName').value,
+        revoked: document.getElementById('NewChkRevoked').checked,
+        activated_at: localInputToUtcIso(document.getElementById('NewActivatedAtLocal').value),
+        last_seen_at: localInputToUtcIso(document.getElementById('NewLastSeenAtLocal').value)
     };
-    try { await api.create(payload); $('#createModal').modal('hide'); await reload(); } catch (err) { alert('Gagal menambah: ' + err.message); }
+    try {
+        await api.create(payload);
+        $('#createModal').modal('hide');
+        await reload();
+    } catch(ex) { alert('Error: ' + ex.message); }
   });
 
   reload();

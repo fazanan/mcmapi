@@ -20,7 +20,7 @@
     <tr>
       <th>Actions</th>
       <th>ID</th>
-      <th>License ID</th>
+      <th>License Key</th>
       <th>Device ID</th>
       <th>Product Name</th>
       <th>Activated At</th>
@@ -41,7 +41,7 @@
       <div class="modal-body">
         <input type="hidden" id="ActivationId">
         <div class="form-row">
-          <div class="form-group col-md-6"><label>License ID</label><input id="LicenseId" class="form-control" type="number" required></div>
+          <div class="form-group col-md-6"><label>License Key</label><input id="LicenseKey" class="form-control" type="text" required></div>
           <div class="form-group col-md-6"><label>Product Name</label><input id="ProductName" class="form-control" maxlength="100" required></div>
         </div>
         <div class="form-group"><label>Device ID</label><input id="DeviceId" class="form-control" maxlength="36" required></div>
@@ -69,29 +69,29 @@
   <div class="modal-dialog modal-lg" role="document">
     <form id="frmCreate" class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Add Activation</h5>
+        <h5 class="modal-title">Create Activation</h5>
         <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
       </div>
       <div class="modal-body">
         <div class="form-row">
-          <div class="form-group col-md-6"><label>License ID</label><input id="C_LicenseId" class="form-control" type="number" required></div>
-          <div class="form-group col-md-6"><label>Product Name</label><input id="C_ProductName" class="form-control" maxlength="100" required></div>
+          <div class="form-group col-md-6"><label>License Key</label><input id="NewLicenseKey" class="form-control" type="text" required></div>
+          <div class="form-group col-md-6"><label>Product Name</label><input id="NewProductName" class="form-control" maxlength="100" required></div>
         </div>
-        <div class="form-group"><label>Device ID</label><input id="C_DeviceId" class="form-control" maxlength="36" required></div>
+        <div class="form-group"><label>Device ID</label><input id="NewDeviceId" class="form-control" maxlength="36" required></div>
         <div class="form-row">
-            <div class="form-group col-md-6"><label>Activated At (Local)</label><input id="C_ActivatedAtLocal" type="datetime-local" class="form-control"></div>
-            <div class="form-group col-md-6"><label>Last Seen At (Local)</label><input id="C_LastSeenAtLocal" type="datetime-local" class="form-control"></div>
+            <div class="form-group col-md-6"><label>Activated At (Local)</label><input id="NewActivatedAtLocal" type="datetime-local" class="form-control"></div>
+            <div class="form-group col-md-6"><label>Last Seen At (Local)</label><input id="NewLastSeenAtLocal" type="datetime-local" class="form-control"></div>
         </div>
         <div class="form-group">
-            <div class="form-check">
-                <input id="C_Revoked" type="checkbox" class="form-check-input">
-                <label class="form-check-label" for="C_Revoked">Revoked</label>
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox" class="custom-control-input" id="NewChkRevoked">
+              <label class="custom-control-label" for="NewChkRevoked">Revoked</label>
             </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="submit" class="btn btn-success">Save</button>
-        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+        <button type="submit" class="btn btn-primary">Create</button>
       </div>
     </form>
   </div>

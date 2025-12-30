@@ -10,19 +10,18 @@ return new class extends Migration
     {
         Schema::create('license_activations_plugin', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('license_id');
+            $table->string('license_key'); // Menggunakan license_key langsung
             $table->char('device_id', 36);
             $table->string('product_name', 100);
             $table->dateTime('activated_at')->useCurrent();
             $table->dateTime('last_seen_at')->useCurrent();
             $table->boolean('revoked')->default(0);
 
-            $table->unique(['license_id', 'device_id', 'product_name'], 'uq_device_product');
+            // Unique berdasarkan license_key, device_id, product_name
+            $table->unique(['license_key', 'device_id', 'product_name'], 'uq_device_product');
             
-            $table->foreign('license_id', 'fk_license_plugin')
-                  ->references('id')
-                  ->on('customer_licenses')
-                  ->onDelete('cascade');
+            // Index untuk pencarian cepat
+            $table->index('license_key');
         });
     }
 
