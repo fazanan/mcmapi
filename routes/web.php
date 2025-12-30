@@ -1,75 +1,67 @@
 <?php
 
+use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\CustomerLicenseController;
+use App\Http\Controllers\Admin\VoiceOverTransactionController;
+use App\Http\Controllers\Admin\ConfigApiKeyController;
+use App\Http\Controllers\Admin\OrderController;
+use App\Http\Controllers\Admin\WhatsappConfigController;
+use App\Http\Controllers\Admin\VoiceJobController;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Schema;
+use App\Http\Controllers\Api\CheckActivationController;
+use App\Http\Controllers\Api\CheckActivationPluginController;
 
 Route::get('/', function () {
     return view('welcome');
 });
 
-// Route untuk cek status data dan struktur tabel
-Route::get('/check-db-status', function () {
-    // Force enable error reporting
-    ini_set('display_errors', 1);
-    ini_set('display_startup_errors', 1);
-    error_reporting(E_ALL);
+Route::get('/dashboard', function () {
+    return view('dashboard');
+})->middleware(['auth', 'verified'])->name('dashboard');
 
-    try {
-        $results = [];
-
-        // 1. Cek Jumlah Data (Memastikan data aman)
-        try {
-            $results['data_status'] = [
-                'users_count' => \App\Models\User::count(),
-                'customer_licenses_count' => \App\Models\CustomerLicense::count(),
-            ];
-        } catch (\Throwable $e) {
-            $results['data_status'] = 'Error counting data: ' . $e->getMessage();
-        }
-
-        // 2. Cek Struktur Tabel license_activations_plugin
-        try {
-            $tableName = 'license_activations_plugin';
-            if (Schema::hasTable($tableName)) {
-                $columns = Schema::getColumnListing($tableName);
-                $hasLicenseKey = in_array('license_key', $columns);
-                
-                $results['table_structure'] = [
-                    'table_exists' => true,
-                    'columns' => $columns,
-                    'status' => $hasLicenseKey ? 'CORRECT (license_key exists)' : 'INCORRECT (still using license_id?)'
-                ];
-            } else {
-                $results['table_structure'] = [
-                    'table_exists' => false,
-                    'status' => 'Table not found'
-                ];
-            }
-        } catch (\Throwable $e) {
-            $results['table_structure'] = 'Error checking schema: ' . $e->getMessage();
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'System Check Results',
-            'data' => $results
-        ]);
-
-    } catch (\Throwable $e) {
-        return "FATAL ERROR: " . $e->getMessage();
-    }
+Route::middleware('auth')->group(function () {
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-// Route sementara untuk fix database (JIKA PERLU DIJALANKAN LAGI)
-Route::get('/fix-migration-plugin', function () {
-    try {
-        Artisan::call('migrate:refresh', [
-            '--path' => '/database/migrations/2025_12_30_000004_create_license_activations_plugin_table.php',
-            '--force' => true
-        ]);
-        return "Migration Refreshed Successfully:\n" . Artisan::output();
-    } catch (\Exception $e) {
-        return "Error: " . $e->getMessage();
-    }
+// Admin Routes
+Route::middleware(['auth'])->group(function () {
+    Route::get('/admin/dashboard', [DashboardController::class, 'index'])->name('admin.dashboard');
+    
+    // Users Management
+    Route::resource('users', UserController::class);
+    
+    // Customer Licenses Management
+    Route::resource('licenses', CustomerLicenseController::class);
+    
+    // Voice Over Transactions
+    Route::get('voice-transactions', [VoiceOverTransactionController::class, 'index'])->name('voice-transactions.index');
+    
+    // Config API Key Management
+    Route::resource('config-api-keys', ConfigApiKeyController::class);
+
+    // Order Management
+    Route::resource('orders', OrderController::class);
+    Route::post('orders/{order}/process', [OrderController::class, 'process'])->name('orders.process');
+    
+    // WhatsApp Config
+    Route::get('whatsapp-config', [WhatsappConfigController::class, 'index'])->name('whatsapp-config.index');
+    Route::post('whatsapp-config/store', [WhatsappConfigController::class, 'store'])->name('whatsapp-config.store');
+    Route::post('whatsapp-config/test', [WhatsappConfigController::class, 'test'])->name('whatsapp-config.test');
+    
+    // Voice Jobs
+    Route::get('voice-jobs', [VoiceJobController::class, 'index'])->name('voice-jobs.index');
 });
+
+// API Routes (Dipindah ke sini karena Laravel 11 defaultnya tidak ada routes/api.php jika installasi minim)
+// Atau jika ingin tetap dipisah, pastikan install api:install
+Route::prefix('api')->group(function () {
+    Route::post('/check_activation', [CheckActivationController::class, 'checkActivation']);
+    Route::post('/check_activation_plugin', [CheckActivationPluginController::class, 'checkActivation']);
+});
+
+require __DIR__.'/auth.php';
