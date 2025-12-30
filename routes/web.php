@@ -235,6 +235,104 @@ Route::prefix('api')->group(function () {
         $m->save();
         return response()->json(['ok' => true, 'seconds_remaining' => (int)$m->vo_seconds_remaining]);
     });
+    
+    // License Activations API
+    Route::get('/license-activations', function () {
+        $q = request()->query('q');
+        $query = \App\Models\LicenseActivationsPlugin::query()->orderByDesc('activated_at');
+        if ($q) {
+            $query->where(function ($w) use ($q) {
+                $w->where('product_name', 'like', "%$q%")
+                  ->orWhere('device_id', 'like', "%$q%")
+                  ->orWhere('license_key', 'like', "%$q%");
+            });
+        }
+        $rows = $query->get()->map(function ($m) {
+            return [
+                'id' => $m->id,
+                'license_key' => $m->license_key,
+                'device_id' => $m->device_id,
+                'product_name' => $m->product_name,
+                'activated_at' => optional($m->activated_at)->toIso8601String(),
+                'last_seen_at' => optional($m->last_seen_at)->toIso8601String(),
+                'revoked' => (bool)$m->revoked,
+            ];
+        });
+        return response()->json($rows);
+    });
+    Route::get('/license-activations/{id}', function ($id) {
+        $m = \App\Models\LicenseActivationsPlugin::find($id);
+        if (!$m) { return response()->json(['message' => 'Not found'], 404); }
+        return response()->json([
+            'id' => $m->id,
+            'license_key' => $m->license_key,
+            'device_id' => $m->device_id,
+            'product_name' => $m->product_name,
+            'activated_at' => optional($m->activated_at)->toIso8601String(),
+            'last_seen_at' => optional($m->last_seen_at)->toIso8601String(),
+            'revoked' => (bool)$m->revoked,
+        ]);
+    });
+    Route::post('/license-activations', function () {
+        $p = request()->json()->all();
+        $m = new \App\Models\LicenseActivationsPlugin();
+        $m->license_key = $p['license_key'] ?? null;
+        $m->device_id = $p['device_id'] ?? null;
+        $m->product_name = $p['product_name'] ?? null;
+        $m->revoked = array_key_exists('revoked', $p) ? (bool)$p['revoked'] : false;
+        $m->activated_at = $p['activated_at'] ?? null;
+        $m->last_seen_at = $p['last_seen_at'] ?? null;
+        $m->save();
+        return response()->json(['ok' => true, 'id' => $m->id]);
+    });
+    Route::put('/license-activations/{id}', function ($id) {
+        $m = \App\Models\LicenseActivationsPlugin::find($id);
+        if (!$m) { return response()->json(['message' => 'Not found'], 404); }
+        $p = request()->json()->all();
+        $m->license_key = $p['license_key'] ?? $m->license_key;
+        $m->device_id = $p['device_id'] ?? $m->device_id;
+        $m->product_name = $p['product_name'] ?? $m->product_name;
+        $m->revoked = array_key_exists('revoked', $p) ? (bool)$p['revoked'] : $m->revoked;
+        $m->activated_at = $p['activated_at'] ?? $m->activated_at;
+        $m->last_seen_at = $p['last_seen_at'] ?? $m->last_seen_at;
+        $m->save();
+        return response()->json(['ok' => true]);
+    });
+    Route::delete('/license-activations/{id}', function ($id) {
+        $m = \App\Models\LicenseActivationsPlugin::find($id);
+        if (!$m) { return response()->json(['message' => 'Not found'], 404); }
+        $m->delete();
+        return response()->json(['ok' => true]);
+    });
+
+    // License Logs API (read-only)
+    Route::get('/license-logs', function () {
+        $q = request()->query('q');
+        $query = DB::table('license_actions')->orderByDesc('created_at');
+        if ($q) {
+            $query->where(function ($w) use ($q) {
+                $w->where('license_key', 'like', "%$q%")
+                  ->orWhere('email', 'like', "%$q%")
+                  ->orWhere('message', 'like', "%$q%")
+                  ->orWhere('action', 'like', "%$q%")
+                  ->orWhere('order_id', 'like', "%$q%")
+                  ->orWhere('result', 'like', "%$q%");
+            });
+        }
+        $rows = $query->get()->map(function ($r) {
+            $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
+            return [
+                'created_at' => $toIso($r->created_at ?? null),
+                'action' => $r->action ?? null,
+                'result' => $r->result ?? null,
+                'email' => $r->email ?? null,
+                'license_key' => $r->license_key ?? null,
+                'order_id' => $r->order_id ?? null,
+                'message' => $r->message ?? null,
+            ];
+        });
+        return response()->json($rows);
+    });
 
     // OrderData API
     Route::get('/orderdata', function () {
