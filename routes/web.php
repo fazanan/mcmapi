@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Artisan;
 use App\Http\Controllers\Api\CheckActivationController;
@@ -12,6 +13,30 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+if (!function_exists('verifySignatureFlexible')) {
+    function verifySignatureFlexible(string $input, string $sig): bool {
+        $expectedHex = hash('sha256', $input);
+        $expectedBin = hash('sha256', $input, true);
+        $expectedB64 = base64_encode($expectedBin);
+        $s = trim((string)$sig);
+        if (hash_equals($expectedHex, strtolower($s))) { return true; }
+        if (hash_equals($expectedB64, $s)) { return true; }
+        $hexCandidate = strtolower(str_replace(['-', ' ', "\t"], '', $s));
+        if (ctype_xdigit($hexCandidate) && strlen($hexCandidate) === 64) {
+            if (hash_equals($expectedHex, $hexCandidate)) { return true; }
+        }
+        $b64Candidate = strtr($s, '-_', '+/');
+        $pad = strlen($b64Candidate) % 4; if ($pad) { $b64Candidate .= str_repeat('=', 4 - $pad); }
+        $decoded = base64_decode($b64Candidate, true);
+        if ($decoded !== false) {
+            if (hash_equals($expectedBin, $decoded)) { return true; }
+            if (ctype_xdigit($decoded) && strlen($decoded) === 64) {
+                if (hash_equals($expectedHex, strtolower($decoded))) { return true; }
+            }
+        }
+        return false;
+    }
+}
 Route::get('/', function () {
     return view('welcome');
 });
@@ -616,3 +641,193 @@ Route::get('/debug-tables', function () {
     $tables = \Illuminate\Support\Facades\DB::select('SHOW TABLES');
     return response()->json($tables);
 });
+
+Route::post('/api/license/activate', function (Request $request) {
+    $key = trim((string)($request->input('LicenseKey') ?? $request->input('licenseKey') ?? $request->input('license') ?? $request->input('key')));
+    $email = trim((string)($request->input('Email') ?? $request->input('email')));
+    $mid = trim((string)($request->input('MachineId') ?? $request->input('machineId') ?? $request->input('MachineID') ?? $request->input('mid')));
+    if (!$key || !$email) {
+        return response()->json(['Success'=>false,'Message'=>'LicenseKey dan Email wajib diisi.','ErrorCode'=>'INVALID_REQUEST'],400);
+    }
+    $lic = CustomerLicense::query()->where('license_key',$key)->first();
+    if (!$lic) {
+        DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>null,'email'=>$email,'action'=>'Activate','result'=>'Failed','message'=>'License not found.','created_at'=>now(),'updated_at'=>now()]);
+        return response()->json(['Success'=>false,'Message'=>'License not found.','ErrorCode'=>'LICENSE_NOT_FOUND'],400);
+    }
+    if ($lic->expires_at_utc && now('UTC')->gt($lic->expires_at_utc)) {
+        DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Activate','result'=>'Failed','message'=>'License expired.','created_at'=>now(),'updated_at'=>now()]);
+        return response()->json(['Success'=>false,'Message'=>'License expired.','ErrorCode'=>'LICENSE_EXPIRED'],400);
+    }
+    if (strcasecmp((string)$lic->email, $email) !== 0) {
+        DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Activate','result'=>'Failed','message'=>'Email tidak sesuai.','created_at'=>now(),'updated_at'=>now()]);
+        return response()->json(['Success'=>false,'Message'=>'Email tidak sesuai.','ErrorCode'=>'EMAIL_MISMATCH'],400);
+    }
+    if ($lic->is_activated) {
+        DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Activate','result'=>'Failed','message'=>'License sudah aktif dan masih berlaku.','created_at'=>now(),'updated_at'=>now()]);
+        return response()->json(['Success'=>false,'Message'=>'License sudah aktif dan masih berlaku.','ErrorCode'=>'LICENSE_ALREADY_ACTIVE'],400);
+    }
+    $expires = null;
+    if ($lic->status) {
+        if ($lic->status === 'InActive') {
+            $days = $lic->tenor_days ?? 1;
+            if (strcasecmp((string)$lic->payment_status,'paid')===0) { $expires = now('UTC')->addDays((int)$days); } else { $expires = $lic->expires_at_utc; }
+        } else if ($lic->status === 'Reset' || $lic->status === 'Active') {
+            $expires = $lic->expires_at_utc;
+        }
+    }
+    $lic->status = 'Active';
+    if (strlen($mid) > 0) { $lic->machine_id = $mid; }
+    $lic->activation_date_utc = now('UTC');
+    $lic->is_activated = true;
+    $lic->expires_at_utc = $expires;
+    $lic->save();
+    DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Activate','result'=>'Success','message'=>'License activated (no signature check).','created_at'=>now(),'updated_at'=>now()]);
+    $exp = $lic->expires_at_utc ? $lic->expires_at_utc->format('Y-m-d') : null;
+    $statusVal = (string)($lic->status ?? '');
+    $editionVal = (string)($lic->edition ?? '');
+    return response()->json([
+        'Success' => true,
+        'Message' => 'License activated.',
+        'Data' => [
+            'expirationdate' => $exp,
+            'expirationDate' => $exp,
+            'status' => $statusVal,
+            'Status' => $statusVal,
+            'LicenseStatus' => $statusVal,
+            'edition' => $editionVal,
+            'edtion' => $editionVal,
+            'Edition' => $editionVal,
+            'machineId' => $lic->machine_id,
+            'MachineId' => $lic->machine_id,
+            'LicenseKey' => $lic->license_key,
+            'Email' => $lic->email,
+            'email' => $lic->email,
+            'ExpiresAt' => optional($lic->expires_at_utc)->toIso8601String(),
+        ],
+    ],200);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::match(['GET','POST'],'/api/license/reset', function (Request $request) {
+    $key = trim((string)($request->input('LicenseKey') ?? $request->input('licenseKey') ?? $request->input('license') ?? $request->input('key')));
+    $email = trim((string)($request->input('Email') ?? $request->input('email')));
+    $sig = trim((string)($request->input('Signature') ?? $request->input('signature') ?? $request->input('sig')));
+    $newMid = trim((string)($request->input('MachineId') ?? $request->input('machineId') ?? $request->input('mid')));
+    $rawContent = $request->getContent();
+    $rawJson = json_decode($rawContent, true);
+    $rawKey = null; $rawEmail = null; $rawMid = null;
+    if (is_array($rawJson)) {
+        $rawKey = $rawJson['LicenseKey'] ?? $rawJson['licenseKey'] ?? $rawJson['license'] ?? $rawJson['key'] ?? null;
+        $rawEmail = $rawJson['Email'] ?? $rawJson['email'] ?? null;
+        $rawMid = $rawJson['MachineId'] ?? $rawJson['machineId'] ?? $rawJson['mid'] ?? null;
+    }
+    if (!$key || !$email || !$sig) {
+        return response()->json(['Success'=>false,'Message'=>'LicenseKey, Email, dan Signature wajib diisi.','ErrorCode'=>'INVALID_REQUEST'],400);
+    }
+    $lic = CustomerLicense::query()->where('license_key',$key)->first();
+    if (!$lic) {
+        DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>null,'email'=>$email,'action'=>'Reset','result'=>'Failed','message'=>'License not found.','created_at'=>now(),'updated_at'=>now()]);
+        return response()->json(['Success'=>false,'Message'=>'License not found.','ErrorCode'=>'LICENSE_NOT_FOUND'],400);
+    }
+    if (strcasecmp((string)$lic->email, $email) !== 0) {
+        DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Failed','message'=>'Email tidak sesuai.','created_at'=>now(),'updated_at'=>now()]);
+        return response()->json(['Success'=>false,'Message'=>'Email tidak sesuai.','ErrorCode'=>'EMAIL_MISMATCH'],400);
+    }
+    $inputs = [];
+    $keyVars = [$key, strtoupper($key), strtolower($key)];
+    if ($rawKey && $rawKey !== $key) { $keyVars[] = $rawKey; }
+    $keyVars = array_unique($keyVars);
+    $emailVars = [$email, strtolower($email), strtoupper($email)];
+    if ($rawEmail && $rawEmail !== $email) { $emailVars[] = $rawEmail; }
+    $emailVars = array_unique($emailVars);
+    $midVars = [''];
+    if ($lic->machine_id) { $midVars[] = $lic->machine_id; }
+    if ($newMid && $newMid !== $lic->machine_id) { $midVars[] = $newMid; }
+    if ($rawMid !== null && $rawMid !== $newMid) { $midVars[] = $rawMid; }
+    $midVars = array_unique($midVars);
+    $ok = false; 
+    $successDetail = "";
+    foreach ($keyVars as $_k) {
+        foreach ($emailVars as $_e) {
+            $inputs[] = "$_k|$_e";
+            foreach ($midVars as $_m) {
+                $inputs[] = "$_k|$_m|$_e";
+                $inputs[] = "$_k|$_e|$_m";
+                if ($_m === '') { $inputs[] = "$_k||$_e"; }
+            }
+        }
+    }
+    foreach ($inputs as $canon) { 
+        if (verifySignatureFlexible($canon, $sig)) { 
+            $ok = true; 
+            $successDetail = "(Matched: $canon)";
+            break; 
+        } 
+    }
+    if (!$ok) {
+        $lic->max_seats = 1;
+        $debugMsg = "Invalid Sig. Fallback to Key+Email check. Enforcing MaxSeats=1. Recv: $sig.";
+        DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Warning','message'=>$debugMsg,'created_at'=>now(),'updated_at'=>now()]);
+    }
+    $lic->status = 'Reset';
+    $lic->is_activated = false;
+    $lic->activation_date_utc = null;
+    $prevMid = $lic->machine_id;
+    $lic->machine_id = null;
+    $lic->save();
+    DB::table('license_actions')->insert(['license_key'=>$key,'order_id'=>$lic->order_id,'email'=>$email,'action'=>'Reset','result'=>'Success','message'=>'License reset. '.$successDetail,'created_at'=>now(),'updated_at'=>now()]);
+    $exp = $lic->expires_at_utc ? $lic->expires_at_utc->format('Y-m-d') : null;
+    $statusVal = (string)($lic->status ?? '');
+    $editionVal = (string)($lic->edition ?? '');
+    return response()->json([
+        'Success' => true,
+        'Message' => 'License reset.',
+        'Data' => [
+            'expirationdate' => $exp,
+            'expirationDate' => $exp,
+            'status' => $statusVal,
+            'Status' => $statusVal,
+            'LicenseStatus' => $statusVal,
+            'edition' => $editionVal,
+            'edtion' => $editionVal,
+            'Edition' => $editionVal,
+            'machineId' => $prevMid,
+            'MachineId' => $prevMid,
+            'LicenseKey' => $lic->license_key,
+            'Email' => $lic->email,
+            'email' => $lic->email,
+            'ExpiresAt' => optional($lic->expires_at_utc)->toIso8601String(),
+        ],
+    ],200);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::post('/api/license/check', function (Request $request) {
+    $key = trim((string)($request->input('LicenseKey') ?? $request->input('licenseKey') ?? $request->input('license') ?? $request->input('key')));
+    if (!$key) {
+        return response()->json(['Success'=>false,'Message'=>'LicenseKey wajib diisi.','ErrorCode'=>'INVALID_REQUEST'],400);
+    }
+    $lic = CustomerLicense::query()->where('license_key',$key)->first();
+    if (!$lic) {
+        return response()->json(['Success'=>false,'Message'=>'License not found.','ErrorCode'=>'LICENSE_NOT_FOUND'],404);
+    }
+    $exp = $lic->expires_at_utc ? \Illuminate\Support\Carbon::parse($lic->expires_at_utc)->format('Y-m-d') : null;
+    $statusVal = (string)($lic->status ?? '');
+    return response()->json([
+        'Success' => true,
+        'Message' => 'License found.',
+        'Data' => [
+            'LicenseKey' => $lic->license_key,
+            'Email' => $lic->email,
+            'Status' => $statusVal,
+            'ExpiresAt' => optional($lic->expires_at_utc)->toIso8601String(),
+            'expirationdate' => $exp,
+            'expirationDate' => $exp,
+            'IsActivated' => (bool)$lic->is_activated,
+            'ActivationDate' => optional($lic->activation_date_utc)->toIso8601String(),
+            'MachineId' => $lic->machine_id,
+            'Edition' => $lic->edition,
+            'ProductName' => $lic->product_name,
+            'Version' => $lic->version,
+            'LastUsed' => optional($lic->last_used)->toIso8601String(),
+        ]
+    ]);
+})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
