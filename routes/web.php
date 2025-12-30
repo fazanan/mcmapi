@@ -197,3 +197,8 @@ Route::prefix('api')->group(function () {
 
 // Remove require auth.php as it does not exist
 // require __DIR__.'/auth.php';
+
+Route::get('/debug-tables', function () {
+    $tables = \Illuminate\Support\Facades\DB::select('SHOW TABLES');
+    return response()->json($tables);
+});
