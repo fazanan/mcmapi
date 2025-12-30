@@ -13,10 +13,16 @@ use App\Http\Controllers\Admin\VoiceJobController;
 use Illuminate\Support\Facades\Artisan;
 use App\Http\Controllers\Api\CheckActivationController;
 use App\Http\Controllers\Api\CheckActivationPluginController;
+use App\Http\Controllers\AuthController;
 
 Route::get('/', function () {
     return view('welcome');
 });
+
+// Authentication Routes
+Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+Route::post('/login', [AuthController::class, 'login']);
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 Route::get('/dashboard', function () {
     return view('dashboard');
@@ -64,4 +70,5 @@ Route::prefix('api')->group(function () {
     Route::post('/check_activation_plugin', [CheckActivationPluginController::class, 'checkActivation']);
 });
 
-require __DIR__.'/auth.php';
+// Remove require auth.php as it does not exist
+// require __DIR__.'/auth.php';
