@@ -483,72 +483,73 @@ Route::prefix('api')->group(function () {
     Route::get('/whatsappconfig', function () {
         $q = request()->query('q');
         $query = DB::table('WhatsAppConfig');
-        if (Schema::hasColumn('WhatsAppConfig', 'updated_at')) {
-            $query->orderByDesc('updated_at');
+        if (Schema::hasColumn('WhatsAppConfig', 'UpdatedAt')) {
+            $query->orderByDesc('UpdatedAt');
         }
         if ($q) {
             $query->where(function ($w) use ($q) {
-                $w->where('api_secret', 'like', "%$q%")
-                  ->orWhere('account_unique_id', 'like', "%$q%");
+                $w->where('ApiSecret', 'like', "%$q%")
+                  ->orWhere('AccountUniqueId', 'like', "%$q%");
             });
         }
         $rows = $query->get()->map(function ($r) {
             $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
             return [
-                'Id' => $r->id ?? $r->Id ?? null,
-                'ApiSecret' => $r->api_secret ?? $r->ApiSecret ?? null,
-                'AccountUniqueId' => $r->account_unique_id ?? $r->AccountUniqueId ?? null,
-                'GroupLink' => $r->group_link ?? $r->GroupLink ?? null,
-                'InstallerLink' => $r->installer_link ?? $r->InstallerLink ?? null,
-                'InstallerVersion' => $r->installer_version ?? $r->InstallerVersion ?? null,
-                'UpdatedAt' => $toIso($r->updated_at ?? $r->UpdatedAt ?? null),
+                'Id' => $r->Id ?? $r->id ?? null,
+                'ApiSecret' => $r->ApiSecret ?? $r->api_secret ?? null,
+                'AccountUniqueId' => $r->AccountUniqueId ?? $r->account_unique_id ?? null,
+                'GroupLink' => $r->GroupLink ?? $r->group_link ?? null,
+                'InstallerLink' => $r->InstallerLink ?? $r->installer_link ?? null,
+                'InstallerVersion' => $r->InstallerVersion ?? $r->installer_version ?? null,
+                'UpdatedAt' => $toIso($r->UpdatedAt ?? $r->updated_at ?? null),
             ];
         });
         return response()->json($rows);
     });
     Route::get('/whatsappconfig/{id}', function ($id) {
-        $r = DB::table('WhatsAppConfig')->where('id', $id)->first();
+        $r = DB::table('WhatsAppConfig')->where('Id', $id)->first();
         if (!$r) { return response()->json(['message' => 'Not found'], 404); }
         $toIso = function ($v) { return $v ? \Illuminate\Support\Carbon::parse($v)->toIso8601String() : null; };
         return response()->json([
-            'Id' => $r->id ?? $r->Id ?? null,
-            'ApiSecret' => $r->api_secret ?? $r->ApiSecret ?? null,
-            'AccountUniqueId' => $r->account_unique_id ?? $r->AccountUniqueId ?? null,
-            'GroupLink' => $r->group_link ?? $r->GroupLink ?? null,
-            'InstallerLink' => $r->installer_link ?? $r->InstallerLink ?? null,
-            'InstallerVersion' => $r->installer_version ?? $r->InstallerVersion ?? null,
-            'UpdatedAt' => $toIso($r->updated_at ?? $r->UpdatedAt ?? null),
+            'Id' => $r->Id ?? $r->id ?? null,
+            'ApiSecret' => $r->ApiSecret ?? $r->api_secret ?? null,
+            'AccountUniqueId' => $r->AccountUniqueId ?? $r->account_unique_id ?? null,
+            'GroupLink' => $r->GroupLink ?? $r->group_link ?? null,
+            'InstallerLink' => $r->InstallerLink ?? $r->installer_link ?? null,
+            'InstallerVersion' => $r->InstallerVersion ?? $r->installer_version ?? null,
+            'UpdatedAt' => $toIso($r->UpdatedAt ?? $r->updated_at ?? null),
         ]);
     });
     Route::post('/whatsappconfig', function () {
         $p = request()->json()->all();
         $now = \Illuminate\Support\Carbon::now('UTC');
         $id = DB::table('WhatsAppConfig')->insertGetId([
-            'api_secret' => $p['ApiSecret'] ?? null,
-            'account_unique_id' => $p['AccountUniqueId'] ?? null,
-            'group_link' => $p['GroupLink'] ?? null,
-            'installer_link' => $p['InstallerLink'] ?? null,
-            'installer_version' => $p['InstallerVersion'] ?? null,
-            'updated_at' => $now,
+            'ApiSecret' => $p['ApiSecret'] ?? null,
+            'AccountUniqueId' => $p['AccountUniqueId'] ?? null,
+            'GroupLink' => $p['GroupLink'] ?? null,
+            'InstallerLink' => $p['InstallerLink'] ?? null,
+            'InstallerVersion' => $p['InstallerVersion'] ?? null,
+            'UpdatedAt' => $now,
+            'CreatedAt' => $now,
         ]);
         return response()->json(['ok' => true, 'Id' => $id]);
     });
     Route::put('/whatsappconfig/{id}', function ($id) {
         $p = request()->json()->all();
         $now = \Illuminate\Support\Carbon::now('UTC');
-        $aff = DB::table('WhatsAppConfig')->where('id', $id)->update([
-            'api_secret' => $p['ApiSecret'] ?? DB::raw('api_secret'),
-            'account_unique_id' => $p['AccountUniqueId'] ?? DB::raw('account_unique_id'),
-            'group_link' => $p['GroupLink'] ?? DB::raw('group_link'),
-            'installer_link' => $p['InstallerLink'] ?? DB::raw('installer_link'),
-            'installer_version' => $p['InstallerVersion'] ?? DB::raw('installer_version'),
-            'updated_at' => $now,
+        $aff = DB::table('WhatsAppConfig')->where('Id', $id)->update([
+            'ApiSecret' => $p['ApiSecret'] ?? DB::raw('ApiSecret'),
+            'AccountUniqueId' => $p['AccountUniqueId'] ?? DB::raw('AccountUniqueId'),
+            'GroupLink' => $p['GroupLink'] ?? DB::raw('GroupLink'),
+            'InstallerLink' => $p['InstallerLink'] ?? DB::raw('InstallerLink'),
+            'InstallerVersion' => $p['InstallerVersion'] ?? DB::raw('InstallerVersion'),
+            'UpdatedAt' => $now,
         ]);
         if ($aff < 1) { return response()->json(['message' => 'Not found'], 404); }
         return response()->json(['ok' => true]);
     });
     Route::delete('/whatsappconfig/{id}', function ($id) {
-        $aff = DB::table('WhatsAppConfig')->where('id', $id)->delete();
+        $aff = DB::table('WhatsAppConfig')->where('Id', $id)->delete();
         if ($aff < 1) { return response()->json(['message' => 'Not found'], 404); }
         return response()->json(['ok' => true]);
     });

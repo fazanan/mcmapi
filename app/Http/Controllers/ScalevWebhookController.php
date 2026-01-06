@@ -234,11 +234,9 @@ class ScalevWebhookController extends Controller
                     // Kirim WA: License gratis sudah habis
                     $this->sendWhatsappFreeQuotaExceeded($phone, $name);
                 } else {
-                    // Kirim WA Pre-Notification sebelum license
-                    $this->sendWhatsappFreeAccessPreNotification($phone, $name);
-
-                    // Beri jeda 2 detik agar pesan intro sampai duluan sebelum license
-                    sleep(2);
+                    // WA Pre-Notification dihapus (req user: jangan dikirim lagi)
+                    // $this->sendWhatsappFreeAccessPreNotification($phone, $name);
+                    // sleep(2);
 
                     // Generate License (Status: Not Paid)
                     // Logic mirip dengan paid transition, tapi disederhanakan untuk case ini
@@ -524,51 +522,7 @@ class ScalevWebhookController extends Controller
         ], 200);
     }
 
-    /**
-     * Kirim WhatsApp Intro sebelum mengirim license gratis (Akses 3 Hari).
-     */
-    private function sendWhatsappFreeTrialIntro(string $phone, ?string $name): void
-    {
-        $cfg = DB::table('WhatsAppConfig')
-            ->orderByDesc('UpdatedAt')
-            ->orderByDesc('Id')
-            ->first();
 
-        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
-            Log::channel('whatsapp')->info('WA free trial intro not sent: missing ApiSecret/AccountUniqueId');
-            return;
-        }
-
-        $target = preg_replace('/\s+/', '', $phone);
-        $target = preg_replace('/[^0-9+]/', '', $target);
-        if (preg_match('/^0\d+$/', $target)) {
-            $target = '62' . substr($target, 1);
-        }
-        if (!$target) return;
-
-        $safeName = $name ?: 'Kak';
-        $message = "Hi Kak {$safeName}, akses uji coba *GRATIS 3 Hari* Aplikasi MCM (Mesin Cuan Maximal) akan dikirim sesaat lagi.\n\n" .
-            "License harus diaktifkan maximal 1x24 jam jika tidak maka akan expired dan tidak bisa diaktifkan lagi.\n\n" .
-            "Silakan dicoba aplikasinya semoga cocok dan bermanfaat.\n" .
-            "*Admin MCM*";
-
-        try {
-            $multipart = [
-                ['name' => 'secret', 'contents' => $cfg->ApiSecret],
-                ['name' => 'account', 'contents' => $cfg->AccountUniqueId],
-                ['name' => 'recipient', 'contents' => $target],
-                ['name' => 'type', 'contents' => 'text'],
-                ['name' => 'message', 'contents' => $message],
-            ];
-            Http::timeout(20)
-                ->withOptions(['multipart' => $multipart])
-                ->post('https://whapify.id/api/send/whatsapp');
-            
-            Log::channel('whatsapp')->info('WA free trial intro sent', ['phone' => $target]);
-        } catch (\Throwable $e) {
-            Log::channel('whatsapp')->warning('WA free trial intro exception', ['error' => $e->getMessage()]);
-        }
-    }
 
     /**
      * Kirim WhatsApp jika quota license gratis (Akses 3 Hari) sudah habis.
@@ -620,72 +574,7 @@ class ScalevWebhookController extends Controller
         }
     }
 
-    /**
-     * Kirim WhatsApp Pre-Notification untuk akses gratis 3 hari sebelum license dikirim.
-     */
-    private function sendWhatsappFreeAccessPreNotification(string $phone, ?string $name): void
-    {
-        // Prioritaskan Config ID=2 untuk pesan terkait akses gratis
-        $cfg = DB::table('WhatsAppConfig')->where('Id', 2)->first();
-        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
-            $cfg = DB::table('WhatsAppConfig')
-                ->orderByDesc('UpdatedAt')
-                ->orderByDesc('Id')
-                ->first();
-        }
 
-        if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
-            Log::channel('whatsapp')->info('WA pre-notification not sent: missing ApiSecret/AccountUniqueId');
-            return;
-        }
-
-        $target = preg_replace('/\s+/', '', $phone);
-        $target = preg_replace('/[^0-9+]/', '', $target);
-        if (preg_match('/^0\d+$/', $target)) {
-            $target = '62' . substr($target, 1);
-        }
-        if (!$target) return;
-
-        $safeName = $name ?: 'Kak';
-        $message = "Hi Kak *{$safeName}*, akses uji coba *GRATIS 3 Hari Aplikasi MCM (Mesin Cuan Maximal)* akan dikirim sesaat lagi.\n\n" .
-            "*License harus diaktifkan maximal 1x24 jam* jika tidak maka akan expired dan tidak bisa diaktifkan lagi .\n\n" .
-            "Silakan dicoba aplikasinya semoga bermanfaat.\n\n" .
-            "Tanya jawab dan tutorial wajib join Group Whatsapp ini:\n" .
-            "https://bit.ly/4rXPMBn \n\n" .
-            "*Admin MCM*";
-
-        try {
-            $maskedSecret = strlen((string)$cfg->ApiSecret) > 8
-                ? substr($cfg->ApiSecret, 0, 6) . '•••' . substr($cfg->ApiSecret, -2)
-                : '•••';
-            
-            Log::channel('whatsapp')->info('Attempting WA pre-notification via Whapify', [
-                'phone' => $target,
-                'account' => $cfg->AccountUniqueId,
-                'secret_masked' => $maskedSecret,
-            ]);
-
-            $resp = Http::timeout(20)
-                ->asMultipart()
-                ->post('https://whapify.id/api/send/whatsapp', [
-                    'secret' => $cfg->ApiSecret,
-                    'account' => $cfg->AccountUniqueId,
-                    'accountUniqueId' => $cfg->AccountUniqueId,
-                    'recipient' => $target,
-                    'type' => 'text',
-                    'message' => $message,
-                    'text' => $message,
-                ]);
-
-            if ($resp->successful()) {
-                Log::channel('whatsapp')->info('WA pre-notification sent', ['phone' => $target, 'status' => $resp->status()]);
-            } else {
-                Log::channel('whatsapp')->warning('WA pre-notification failed', ['phone' => $target, 'status' => $resp->status(), 'body' => $resp->body()]);
-            }
-        } catch (\Throwable $e) {
-            Log::channel('whatsapp')->warning('WA pre-notification exception', ['error' => $e->getMessage()]);
-        }
-    }
 
     /**
      * Mengirim informasi login ke nomor WhatsApp user via Whapify.
