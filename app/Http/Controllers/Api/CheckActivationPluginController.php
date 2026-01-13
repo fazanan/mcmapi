@@ -46,10 +46,14 @@ class CheckActivationPluginController extends Controller
             ], 403);
         }
 
-        // 4. Check Plugin Activation / Seats
-        // Check if this device is already activated
+        $prodRaw = $productName ?: ($license->product_name ?? '');
+        $prodNorm = strtolower(trim($prodRaw));
+        if (strpos($prodNorm, 'tiktok') !== false) { $productCode = 'massuploadtiktok'; }
+        else if (strpos($prodNorm, 'shopee') !== false) { $productCode = 'shopeescrap'; }
+        else { $productCode = $prodNorm ?: 'unknown'; }
         $activation = LicenseActivationsPlugin::where('license_key', $licenseKey)
             ->where('device_id', $deviceId)
+            ->where('product_name', $productCode)
             ->first();
 
         if ($activation) {
@@ -61,7 +65,14 @@ class CheckActivationPluginController extends Controller
             $license->last_used = Carbon::now();
             $license->save();
 
-            $usedSeats = LicenseActivationsPlugin::where('license_key', $licenseKey)->count();
+            if ($productCode === 'shopeescrap') {
+                $maxSeats = (int)($license->max_seats_shopee_scrap ?? 0);
+            } else if ($productCode === 'massuploadtiktok') {
+                $maxSeats = (int)($license->max_seat_upload_tiktok ?? 0);
+            } else {
+                $maxSeats = (int)($license->max_seats ?? 0);
+            }
+            $usedSeats = LicenseActivationsPlugin::where('license_key', $licenseKey)->where('product_name', $productCode)->count();
 
             return response()->json([
                 'isValid' => true,
@@ -69,15 +80,22 @@ class CheckActivationPluginController extends Controller
                 'activation' => $activation,
                 'expiredAt' => $license->expires_at_utc,
                 'expired_at' => optional($license->expires_at_utc)->toIso8601String(),
-                'maxseatsshopee' => $license->max_seats_shopee_scrap,
+                'product' => $productCode,
+                'max_seats' => $maxSeats,
+                'used_seats' => $usedSeats,
+                'maxseatsshopee' => $maxSeats,
                 'usedseatshopee' => $usedSeats
             ]);
         }
 
-        // New Device: Check seats availability
-        // Determine max seats based on product name if needed, or use column
-        $maxSeats = $license->max_seats_shopee_scrap ?? $license->max_seats ?? 1;
-        $usedSeats = LicenseActivationsPlugin::where('license_key', $licenseKey)->count();
+        if ($productCode === 'shopeescrap') {
+            $maxSeats = (int)($license->max_seats_shopee_scrap ?? 0);
+        } else if ($productCode === 'massuploadtiktok') {
+            $maxSeats = (int)($license->max_seat_upload_tiktok ?? 0);
+        } else {
+            $maxSeats = (int)($license->max_seats ?? 0);
+        }
+        $usedSeats = LicenseActivationsPlugin::where('license_key', $licenseKey)->where('product_name', $productCode)->count();
 
         if ($usedSeats >= $maxSeats) {
              return response()->json([
@@ -89,18 +107,20 @@ class CheckActivationPluginController extends Controller
             ], 403);
         }
 
-        // Register new activation
         $newActivation = LicenseActivationsPlugin::create([
             'license_key' => $licenseKey,
             'device_id' => $deviceId,
-            'product_name' => $productName ?? $license->product_name,
+            'product_name' => $productCode,
             'activated_at' => Carbon::now(),
             'last_seen_at' => Carbon::now(),
             'revoked' => false
         ]);
 
-        // Update license stats
-        $license->used_seats_shopee_scrap = $usedSeats + 1; // Or just increment
+        if ($productCode === 'shopeescrap') {
+            $license->used_seats_shopee_scrap = $usedSeats + 1;
+        } else if ($productCode === 'massuploadtiktok') {
+            $license->used_seat_upload_tiktok = $usedSeats + 1;
+        }
         $license->last_used = Carbon::now();
         $license->save();
 
@@ -110,7 +130,10 @@ class CheckActivationPluginController extends Controller
             'activation' => $newActivation,
             'expiredAt' => $license->expires_at_utc,
             'expired_at' => optional($license->expires_at_utc)->toIso8601String(),
-            'maxseatsshopee' => $license->max_seats_shopee_scrap,
+            'product' => $productCode,
+            'max_seats' => $maxSeats,
+            'used_seats' => $usedSeats + 1,
+            'maxseatsshopee' => $maxSeats,
             'usedseatshopee' => $usedSeats + 1
         ]);
     }
