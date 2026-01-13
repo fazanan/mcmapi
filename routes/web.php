@@ -111,6 +111,7 @@ Route::prefix('api')->group(function () {
     Route::post('/webhooks/scalev', [ScalevWebhookController::class, 'handle']);
     Route::post('/check_activation', [CheckActivationController::class, 'checkActivation']);
     Route::post('/check_activation_plugin', [CheckActivationPluginController::class, 'checkActivation']);
+    Route::post('/check_activation_plugin/logout', [CheckActivationPluginController::class, 'logout']);
     Route::get('/customerlicense', function () {
         $q = request()->query('q');
         $query = CustomerLicense::query()->orderByDesc('updated_at');
