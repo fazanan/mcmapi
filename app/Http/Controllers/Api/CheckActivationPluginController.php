@@ -54,10 +54,46 @@ class CheckActivationPluginController extends Controller
         $activation = LicenseActivationsPlugin::where('license_key', $licenseKey)
             ->where('device_id', $deviceId)
             ->where('product_name', $productCode)
-            ->where('revoked', false)
             ->first();
 
         if ($activation) {
+            // Check quota if this was revoked
+            if ($activation->revoked) {
+                 if ($productCode === 'shopeescrap') {
+                    $maxSeats = (int)($license->max_seats_shopee_scrap ?? 0);
+                } else if ($productCode === 'massuploadtiktok') {
+                    $maxSeats = (int)($license->max_seat_upload_tiktok ?? 0);
+                } else {
+                    $maxSeats = (int)($license->max_seats ?? 0);
+                }
+                
+                $usedSeats = LicenseActivationsPlugin::where('license_key', $licenseKey)
+                    ->where('product_name', $productCode)
+                    ->where('revoked', false)
+                    ->count();
+                
+                if ($usedSeats >= $maxSeats) {
+                    return response()->json([
+                        'isValid' => false,
+                        'message' => 'Max seats reached.',
+                        'max_seats' => $maxSeats,
+                        'used_seats' => $usedSeats,
+                        'expired_at' => optional($license->expires_at_utc)->toIso8601String()
+                    ], 403);
+                }
+                
+                // Re-activate
+                $activation->revoked = false;
+                $activation->activated_at = Carbon::now();
+                
+                // Increment usage counter for re-activation
+                if ($productCode === 'shopeescrap') {
+                    $license->used_seats_shopee_scrap = $usedSeats + 1;
+                } else if ($productCode === 'massuploadtiktok') {
+                    $license->used_seat_upload_tiktok = $usedSeats + 1;
+                }
+            }
+
             // Update last seen
             $activation->last_seen_at = Carbon::now();
             $activation->save();
@@ -73,10 +109,7 @@ class CheckActivationPluginController extends Controller
             } else {
                 $maxSeats = (int)($license->max_seats ?? 0);
             }
-            $usedSeats = LicenseActivationsPlugin::where('license_key', $licenseKey)
-                ->where('product_name', $productCode)
-                ->where('revoked', false)
-                ->count();
+            $usedSeats = LicenseActivationsPlugin::where('license_key', $licenseKey)->where('product_name', $productCode)->where('revoked', false)->count();
 
             return response()->json([
                 'isValid' => true,
