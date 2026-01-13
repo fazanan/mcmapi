@@ -145,6 +145,8 @@ Route::prefix('api')->group(function () {
                 'DeviceId' => $m->device_id,
                 'MaxSeatsShopeeScrap' => $m->max_seats_shopee_scrap,
                 'UsedSeatsShopeeScrap' => $m->used_seats_shopee_scrap,
+                'MaxSeatUploadTiktok' => $m->max_seat_upload_tiktok,
+                'UsedSeatUploadTiktok' => $m->used_seat_upload_tiktok,
                 'MaxSeats' => $m->max_seats,
                 'MaxVideo' => $m->max_video,
                 'Features' => $m->features,
@@ -181,6 +183,8 @@ Route::prefix('api')->group(function () {
             'RowVerBase64' => null,
             'MaxSeatsShopeeScrap' => $m->max_seats_shopee_scrap,
             'UsedSeatsShopeeScrap' => $m->used_seats_shopee_scrap,
+            'MaxSeatUploadTiktok' => $m->max_seat_upload_tiktok,
+            'UsedSeatUploadTiktok' => $m->used_seat_upload_tiktok,
         ]);
     });
     Route::put('/customerlicense/{orderId}', function ($orderId) {
@@ -206,6 +210,8 @@ Route::prefix('api')->group(function () {
         $m->device_id = $p['DeviceId'] ?? $m->device_id;
         $m->max_seats_shopee_scrap = array_key_exists('MaxSeatsShopeeScrap', $p) ? $p['MaxSeatsShopeeScrap'] : $m->max_seats_shopee_scrap;
         $m->used_seats_shopee_scrap = array_key_exists('UsedSeatsShopeeScrap', $p) ? $p['UsedSeatsShopeeScrap'] : $m->used_seats_shopee_scrap;
+        $m->max_seat_upload_tiktok = array_key_exists('MaxSeatUploadTiktok', $p) ? $p['MaxSeatUploadTiktok'] : $m->max_seat_upload_tiktok;
+        $m->used_seat_upload_tiktok = array_key_exists('UsedSeatUploadTiktok', $p) ? $p['UsedSeatUploadTiktok'] : $m->used_seat_upload_tiktok;
         $m->save();
         return response()->json(['ok' => true]);
     });
@@ -238,6 +244,8 @@ Route::prefix('api')->group(function () {
         $m->device_id = $p['DeviceId'] ?? null;
         $m->max_seats_shopee_scrap = $p['MaxSeatsShopeeScrap'] ?? null;
         $m->used_seats_shopee_scrap = $p['UsedSeatsShopeeScrap'] ?? null;
+        $m->max_seat_upload_tiktok = $p['MaxSeatUploadTiktok'] ?? null;
+        $m->used_seat_upload_tiktok = $p['UsedSeatUploadTiktok'] ?? null;
         $m->vo_seconds_remaining = 0;
         $m->status = $p['Status'] ?? 'InActive';
         $m->save();

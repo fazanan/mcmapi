@@ -55,6 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
         `<td>${r.DeviceId || ''}</td>` +
         `<td>${r.MaxSeatsShopeeScrap ?? ''}</td>` +
         `<td>${r.UsedSeatsShopeeScrap ?? ''}</td>` +
+        `<td>${r.MaxSeatUploadTiktok ?? ''}</td>` +
+        `<td>${r.UsedSeatUploadTiktok ?? ''}</td>` +
         `<td>${toUtcString(r.LastUsed)}</td>`;
       tbody.appendChild(tr);
     }
@@ -101,6 +103,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('MaxVideo').value = d.MaxVideo ?? '';
     document.getElementById('MaxSeatsShopeeScrap').value = d.MaxSeatsShopeeScrap ?? '';
     document.getElementById('UsedSeatsShopeeScrap').value = d.UsedSeatsShopeeScrap ?? '';
+    const elMT = document.getElementById('MaxSeatUploadTiktok'); if (elMT) elMT.value = d.MaxSeatUploadTiktok ?? '';
+    const elUT = document.getElementById('UsedSeatUploadTiktok'); if (elUT) elUT.value = d.UsedSeatUploadTiktok ?? '';
     document.getElementById('Features').value = d.Features || '';
     document.getElementById('Status').value = d.Status || '';
     document.getElementById('IsActivated').checked = !!d.IsActivated;
@@ -127,8 +131,10 @@ document.addEventListener('DOMContentLoaded', () => {
       TenorDays: toIntOrNull(document.getElementById('TenorDays').value),
       MaxSeats: toIntOrNull(document.getElementById('MaxSeats').value),
       MaxVideo: toIntOrNull(document.getElementById('MaxVideo').value),
-      MaxSeatsShopeeScrap: toIntOrNull(document.getElementById('MaxSeatsShopeeScrap').value),
-      UsedSeatsShopeeScrap: toIntOrNull(document.getElementById('UsedSeatsShopeeScrap').value),
+      MaxSeatsShopeeScrap: toIntOrNull(document.getElementById('MaxSeatsShopeeScrap')?.value),
+      UsedSeatsShopeeScrap: toIntOrNull(document.getElementById('UsedSeatsShopeeScrap')?.value),
+      MaxSeatUploadTiktok: toIntOrNull(document.getElementById('MaxSeatUploadTiktok')?.value),
+      UsedSeatUploadTiktok: toIntOrNull(document.getElementById('UsedSeatUploadTiktok')?.value),
       Features: document.getElementById('Features').value || null,
       Status: document.getElementById('Status').value || null,
       IsActivated: document.getElementById('IsActivated').checked,
@@ -159,6 +165,8 @@ document.addEventListener('DOMContentLoaded', () => {
       MaxVideo: toIntOrNull(document.getElementById('C_MaxVideo').value),
       MaxSeatsShopeeScrap: toIntOrNull(document.getElementById('C_MaxSeatsShopeeScrap').value),
       UsedSeatsShopeeScrap: toIntOrNull(document.getElementById('C_UsedSeatsShopeeScrap').value),
+      MaxSeatUploadTiktok: toIntOrNull(document.getElementById('C_MaxSeatUploadTiktok')?.value),
+      UsedSeatUploadTiktok: toIntOrNull(document.getElementById('C_UsedSeatUploadTiktok')?.value),
       Features: document.getElementById('C_Features').value || null,
       ExpiresAtUtc: localInputToUtcIso(document.getElementById('C_ExpiresAtLocal').value),
       IsActivated: document.getElementById('C_IsActivated').checked,

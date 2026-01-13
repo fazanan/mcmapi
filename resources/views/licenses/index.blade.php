@@ -39,6 +39,8 @@
       <th>DeviceId</th>
       <th>MaxSeatsShopee</th>
       <th>UsedSeatsShopee</th>
+      <th>MaxSeatsTikTok</th>
+      <th>UsedSeatsTikTok</th>
       <th>Last Used</th>
     </tr>
   </thead>
@@ -77,6 +79,10 @@
             <div class="form-group col-md-6"><label>MaxSeats Shopee</label><input id="MaxSeatsShopeeScrap" type="number" min="0" class="form-control"></div>
             <div class="form-group col-md-6"><label>UsedSeats Shopee</label><input id="UsedSeatsShopeeScrap" type="number" min="0" class="form-control"></div>
         </div>
+        <div class="form-row">
+            <div class="form-group col-md-6"><label>MaxSeats TikTok</label><input id="MaxSeatUploadTiktok" type="number" min="0" class="form-control"></div>
+            <div class="form-group col-md-6"><label>UsedSeats TikTok</label><input id="UsedSeatUploadTiktok" type="number" min="0" class="form-control"></div>
+        </div>
         <div class="form-group"><label>Features</label><input id="Features" class="form-control" placeholder="comma separated"></div>
         <div class="form-row">
           <div class="form-group col-md-6"><label>ActivationDate (Local)</label><input id="ActivationDateLocal" type="datetime-local" class="form-control"></div>
@@ -98,7 +104,7 @@
   </div>
 </div>
 @push('scripts')
-<script src="/js/licenses.js?v=20251230"></script>
+<script src="/js/licenses.js?v=20260113_3"></script>
 @endpush
 
 <div class="modal fade" id="createModal" tabindex="-1" role="dialog" aria-hidden="true">
@@ -127,6 +133,10 @@
         <div class="form-row">
             <div class="form-group col-md-6"><label>MaxSeats Shopee</label><input id="C_MaxSeatsShopeeScrap" type="number" min="0" class="form-control"></div>
             <div class="form-group col-md-6"><label>UsedSeats Shopee</label><input id="C_UsedSeatsShopeeScrap" type="number" min="0" class="form-control"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group col-md-6"><label>MaxSeats TikTok</label><input id="C_MaxSeatUploadTiktok" type="number" min="0" class="form-control"></div>
+            <div class="form-group col-md-6"><label>UsedSeats TikTok</label><input id="C_UsedSeatUploadTiktok" type="number" min="0" class="form-control"></div>
         </div>
         <div class="form-group"><label>Features</label><input id="C_Features" class="form-control"></div>
         <div class="form-row">
