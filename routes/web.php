@@ -110,8 +110,10 @@ Route::middleware('auth')->group(function () {
 Route::prefix('api')->group(function () {
     Route::post('/webhooks/scalev', [ScalevWebhookController::class, 'handle']);
     Route::post('/check_activation', [CheckActivationController::class, 'checkActivation']);
-    Route::post('/check_activation_plugin', [CheckActivationPluginController::class, 'checkActivation']);
-    Route::post('/check_activation_plugin/logout', [CheckActivationPluginController::class, 'logout']);
+    Route::post('/check_activation_plugin', [CheckActivationPluginController::class, 'checkActivation'])
+        ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+    Route::post('/check_activation_plugin/logout', [CheckActivationPluginController::class, 'logout'])
+        ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
     Route::get('/customerlicense', function () {
         $q = request()->query('q');
         $query = CustomerLicense::query()->orderByDesc('updated_at');
