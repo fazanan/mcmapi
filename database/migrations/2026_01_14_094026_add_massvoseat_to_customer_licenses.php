@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('customer_licenses', function (Blueprint $table) {
-            //
+            if (!Schema::hasColumn('customer_licenses', 'massvoseat')) {
+                $table->integer('massvoseat')->nullable()->default(0);
+            }
         });
     }
 
@@ -22,7 +24,9 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('customer_licenses', function (Blueprint $table) {
-            //
+            if (Schema::hasColumn('customer_licenses', 'massvoseat')) {
+                $table->dropColumn('massvoseat');
+            }
         });
     }
 };
