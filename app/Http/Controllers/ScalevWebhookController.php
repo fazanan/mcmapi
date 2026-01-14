@@ -249,6 +249,7 @@ class ScalevWebhookController extends Controller
         if ($rawProduct !== '') {
             $rawProduct = preg_replace('/Akses\s+Gratis/i', 'Akses 3 Hari', $rawProduct);
         }
+        $isMassVoProduct = stripos($rawProduct, 'MCM Mass Voice Over') !== false;
         if (preg_match('/\s-\s*([^\-\)]+?)\s-\s*/u', $rawProduct, $m)) {
             $edition = trim($m[1]);
         }
@@ -276,7 +277,20 @@ class ScalevWebhookController extends Controller
         $featuresInput = $data['features'] ?? null;
         $featuresJson = is_array($featuresInput) ? json_encode($featuresInput) : ($featuresInput ?: json_encode(['Batch','TextOverlay']));
 
-        $lic = CustomerLicense::query()->where('order_id', $orderId)->first();
+        $licenseTargetEmail = $orderEmail ?? $email;
+        if ($isMassVoProduct && $licenseTargetEmail) {
+            $lic = CustomerLicense::query()
+                ->where('email', $licenseTargetEmail)
+                ->where('payment_status', 'paid')
+                ->where(function ($q) {
+                    $q->where('product_name', 'like', '%MCM Mass Voice Over%');
+                })
+                ->orderByDesc('created_at')
+                ->first();
+        } else {
+            $lic = CustomerLicense::query()->where('order_id', $orderId)->first();
+        }
+
         if (!$lic) {
             // License format: MCM-(kombinasi angka dan huruf random) 8 karakter
             $newKey = 'MCM-' . Str::upper(Str::random(8));
@@ -286,7 +300,7 @@ class ScalevWebhookController extends Controller
             $finalEmail = $orderEmail ?? $email;
             $finalPhone = $orderPhone ?? $phone;
             $finalProduct = $rawProduct;
-            $lic = CustomerLicense::create([
+            $payload = [
                 'order_id' => $orderId,
                 'license_key' => $newKey,
                 'owner' => $ownerName,
@@ -302,7 +316,11 @@ class ScalevWebhookController extends Controller
                 'max_video' => 2147483647,
                 'vo_seconds_remaining' => 100000,
                 'status' => 'InActive',
-            ]);
+            ];
+            if ($isMassVoProduct) {
+                $payload['massvoseat'] = 1;
+            }
+            $lic = CustomerLicense::create($payload);
             DB::table('license_actions')->insert([
                 'license_key' => $lic->license_key,
                 'order_id' => $lic->order_id,
@@ -314,25 +332,35 @@ class ScalevWebhookController extends Controller
                 'updated_at' => now(),
             ]);
         } else {
-            $updates = [
-                // Prefer data dari OrderData; fallback ke payload
-                'owner' => ($orderName ?: $name) ?: ($lic->owner ?: (($orderEmail ?? $email) ? (strstr(($orderEmail ?? $email), '@', true) ?: 'Member') : 'Member')),
-                'email' => ($orderEmail ?? $email) ?? $lic->email,
-                'phone' => ($orderPhone ?? $phone) ?? $lic->phone,
-                'edition' => $lic->edition ?: $edition,
-                'payment_status' => 'paid',
-                'product_name' => ($rawProduct ?: $lic->product_name),
-                'tenor_days' => $lic->tenor_days ?: $validityDays,
-                'features' => $lic->features ?: $featuresJson,
-                'status' => $lic->status ?: 'InActive',
-            ];
-            // Only set license key and expires if currently empty
-            if (empty($lic->license_key)) { $updates['license_key'] = 'MCM-' . Str::upper(Str::random(8)); }
-            if (empty($lic->expires_at_utc)) { $updates['expires_at_utc'] = $expires; }
-            if (empty($lic->max_seats)) { $updates['max_seats'] = 1; }
-            if (empty($lic->max_video)) { $updates['max_video'] = 2147483647; }
-            $lic->fill($updates);
-            $lic->save();
+            if ($isMassVoProduct) {
+                if ($lic->massvoseat != 1) {
+                    $lic->massvoseat = 1;
+                }
+                if ($lic->payment_status !== 'paid') {
+                    $lic->payment_status = 'paid';
+                }
+                $lic->save();
+            } else {
+                $updates = [
+                    // Prefer data dari OrderData; fallback ke payload
+                    'owner' => ($orderName ?: $name) ?: ($lic->owner ?: (($orderEmail ?? $email) ? (strstr(($orderEmail ?? $email), '@', true) ?: 'Member') : 'Member')),
+                    'email' => ($orderEmail ?? $email) ?? $lic->email,
+                    'phone' => ($orderPhone ?? $phone) ?? $lic->phone,
+                    'edition' => $lic->edition ?: $edition,
+                    'payment_status' => 'paid',
+                    'product_name' => ($rawProduct ?: $lic->product_name),
+                    'tenor_days' => $lic->tenor_days ?: $validityDays,
+                    'features' => $lic->features ?: $featuresJson,
+                    'status' => $lic->status ?: 'InActive',
+                ];
+                // Only set license key and expires if currently empty
+                if (empty($lic->license_key)) { $updates['license_key'] = 'MCM-' . Str::upper(Str::random(8)); }
+                if (empty($lic->expires_at_utc)) { $updates['expires_at_utc'] = $expires; }
+                if (empty($lic->max_seats)) { $updates['max_seats'] = 1; }
+                if (empty($lic->max_video)) { $updates['max_video'] = 2147483647; }
+                $lic->fill($updates);
+                $lic->save();
+            }
         }
 
         // Pastikan user dibuat/setelah license di-generate: ambil dari OrderData
@@ -736,7 +764,21 @@ class ScalevWebhookController extends Controller
                 $productNameCandidate = (string)$licRowTmp->product_name;
             }
         }
-        if ($productNameCandidate && (stripos($productNameCandidate, 'Akses Gratis') !== false || stripos($productNameCandidate, 'Akses 3 Hari') !== false)) {
+        if ($productNameCandidate && stripos($productNameCandidate, 'MCM Mass Voice Over') !== false) {
+            $cfg = DB::table('WhatsAppConfig')->where('Id', 3)->first();
+            if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+                $cfg = DB::table('WhatsAppConfig')->where('Id', 1)->first();
+                if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
+                    $cfg = DB::table('WhatsAppConfig')
+                        ->where('Id', '<>', 2)
+                        ->orderByDesc('UpdatedAt')
+                        ->first();
+                    if (!$cfg) {
+                        $cfg = DB::table('WhatsAppConfig')->orderByDesc('UpdatedAt')->first();
+                    }
+                }
+            }
+        } elseif ($productNameCandidate && (stripos($productNameCandidate, 'Akses Gratis') !== false || stripos($productNameCandidate, 'Akses 3 Hari') !== false)) {
             $cfg = DB::table('WhatsAppConfig')->where('Id', 2)->first();
             if (!$cfg || empty($cfg->ApiSecret) || empty($cfg->AccountUniqueId)) {
                 $cfg = DB::table('WhatsAppConfig')
@@ -1071,12 +1113,6 @@ class ScalevWebhookController extends Controller
     {
         if (!$user || empty($user->email)) { return; }
 
-        // Informasi tambahan (installer, group) dari WhatsAppConfig bila tersedia
-        $cfg = DB::table('WhatsAppConfig')
-            ->orderByDesc('UpdatedAt')
-            ->orderByDesc('Id')
-            ->first();
-
         $appUrl = rtrim(env('APP_URL', url('/')), '/');
         $loginUrl = $appUrl . '/login';
 
@@ -1084,6 +1120,22 @@ class ScalevWebhookController extends Controller
         $productName = $orderRow ? ($orderRow->ProductName ?? '') : ($lic ? ($lic->product_name ?? '') : '');
         if ($productName) {
             $productName = preg_replace('/Akses\s+Gratis/i', 'Akses 3 Hari', (string)$productName);
+        }
+
+        // Informasi tambahan (installer, group) dari WhatsAppConfig bila tersedia
+        if ($productName && stripos($productName, 'MCM Mass Voice Over') !== false) {
+            $cfg = DB::table('WhatsAppConfig')->where('Id', 3)->first();
+            if (!$cfg) {
+                $cfg = DB::table('WhatsAppConfig')
+                    ->orderByDesc('UpdatedAt')
+                    ->orderByDesc('Id')
+                    ->first();
+            }
+        } else {
+            $cfg = DB::table('WhatsAppConfig')
+                ->orderByDesc('UpdatedAt')
+                ->orderByDesc('Id')
+                ->first();
         }
         $tenorDays = $lic ? ((int)($lic->tenor_days ?? 0)) : 0;
         $expiresAt = $lic && !empty($lic->expires_at_utc)

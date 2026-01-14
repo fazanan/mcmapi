@@ -540,7 +540,9 @@ Route::prefix('api')->group(function () {
     Route::post('/whatsappconfig', function () {
         $p = request()->json()->all();
         $now = \Illuminate\Support\Carbon::now('UTC');
-        $id = DB::table('WhatsAppConfig')->insertGetId([
+        $nextId = (int)(DB::table('WhatsAppConfig')->max('Id') ?? 0) + 1;
+        DB::table('WhatsAppConfig')->insert([
+            'Id' => $nextId,
             'ApiSecret' => $p['ApiSecret'] ?? null,
             'AccountUniqueId' => $p['AccountUniqueId'] ?? null,
             'GroupLink' => $p['GroupLink'] ?? null,
@@ -549,7 +551,7 @@ Route::prefix('api')->group(function () {
             'UpdatedAt' => $now,
             'CreatedAt' => $now,
         ]);
-        return response()->json(['ok' => true, 'Id' => $id]);
+        return response()->json(['ok' => true, 'Id' => $nextId]);
     });
     Route::put('/whatsappconfig/{id}', function ($id) {
         $p = request()->json()->all();
