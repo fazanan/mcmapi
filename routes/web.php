@@ -217,14 +217,14 @@ Route::prefix('api')->group(function () {
         $m->used_seat_upload_tiktok = array_key_exists('UsedSeatUploadTiktok', $p) ? $p['UsedSeatUploadTiktok'] : $m->used_seat_upload_tiktok;
         $m->save();
         return response()->json(['ok' => true]);
-    });
+    })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
     Route::delete('/customerlicense/{orderId}', function ($orderId) {
         $hard = filter_var(request()->query('hard', false), FILTER_VALIDATE_BOOLEAN);
         $m = CustomerLicense::where('order_id', $orderId)->first();
         if (!$m) { return response()->json(['message' => 'Not found'], 404); }
         if ($hard) { $m->forceDelete(); } else { $m->delete(); }
         return response()->json(['ok' => true]);
-    });
+    })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
     Route::post('/customerlicense', function () {
         $p = request()->json()->all();
         $m = new CustomerLicense();
@@ -253,7 +253,7 @@ Route::prefix('api')->group(function () {
         $m->status = $p['Status'] ?? 'InActive';
         $m->save();
         return response()->json(['ok' => true, 'OrderId' => $m->order_id]);
-    });
+    })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
     Route::get('/customerlicense/{orderId}/vo', function ($orderId) {
         $m = CustomerLicense::where('order_id', $orderId)->first();
         if (!$m) { return response()->json(['message' => 'Not found'], 404); }
@@ -268,7 +268,7 @@ Route::prefix('api')->group(function () {
         $m->vo_seconds_remaining = (int)($m->vo_seconds_remaining ?? 0) + $add;
         $m->save();
         return response()->json(['ok' => true, 'seconds_remaining' => (int)$m->vo_seconds_remaining]);
-    });
+    })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
     Route::post('/customerlicense/{orderId}/vo/debit', function ($orderId) {
         $m = CustomerLicense::where('order_id', $orderId)->first();
         if (!$m) { return response()->json(['message' => 'Not found'], 404); }
@@ -280,7 +280,7 @@ Route::prefix('api')->group(function () {
         $m->vo_seconds_remaining = $curr - $use;
         $m->save();
         return response()->json(['ok' => true, 'seconds_remaining' => (int)$m->vo_seconds_remaining]);
-    });
+    })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
     
     // License Activations API
     Route::get('/license-activations', function () {
