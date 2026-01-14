@@ -41,6 +41,7 @@
       <th>UsedSeatsShopee</th>
       <th>MaxSeatsTikTok</th>
       <th>UsedSeatsTikTok</th>
+      <th>MassVoSeat</th>
       <th>Last Used</th>
     </tr>
   </thead>
@@ -83,6 +84,7 @@
             <div class="form-group col-md-6"><label>MaxSeats TikTok</label><input id="MaxSeatUploadTiktok" type="number" min="0" class="form-control"></div>
             <div class="form-group col-md-6"><label>UsedSeats TikTok</label><input id="UsedSeatUploadTiktok" type="number" min="0" class="form-control"></div>
         </div>
+        <div class="form-group"><label>MassVoSeat</label><input id="MassVoSeat" type="number" min="0" class="form-control"></div>
         <div class="form-group"><label>Features</label><input id="Features" class="form-control" placeholder="comma separated"></div>
         <div class="form-row">
           <div class="form-group col-md-6"><label>ActivationDate (Local)</label><input id="ActivationDateLocal" type="datetime-local" class="form-control"></div>
@@ -138,7 +140,8 @@
             <div class="form-group col-md-6"><label>MaxSeats TikTok</label><input id="C_MaxSeatUploadTiktok" type="number" min="0" class="form-control"></div>
             <div class="form-group col-md-6"><label>UsedSeats TikTok</label><input id="C_UsedSeatUploadTiktok" type="number" min="0" class="form-control"></div>
         </div>
-        <div class="form-group"><label>Features</label><input id="C_Features" class="form-control"></div>
+        <div class="form-group"><label>MassVoSeat</label><input id="C_MassVoSeat" type="number" min="0" class="form-control"></div>
+        <div class="form-group"><label>Features</label><input id="C_Features" class="form-control" placeholder="comma separated"></div>
         <div class="form-row">
           <div class="form-group col-md-6"><label>ExpiresAt (Local)</label><input id="C_ExpiresAtLocal" type="datetime-local" class="form-control"></div>
           <div class="form-group col-md-6"><div class="form-check mt-4"><input id="C_IsActivated" type="checkbox" class="form-check-input"><label class="form-check-label" for="C_IsActivated">Is Activated</label></div></div>

@@ -57,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `<td>${r.UsedSeatsShopeeScrap ?? ''}</td>` +
         `<td>${r.MaxSeatUploadTiktok ?? ''}</td>` +
         `<td>${r.UsedSeatUploadTiktok ?? ''}</td>` +
+        `<td>${r.MassVoSeat ?? ''}</td>` +
         `<td>${toUtcString(r.LastUsed)}</td>`;
       tbody.appendChild(tr);
     }
@@ -105,6 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('UsedSeatsShopeeScrap').value = d.UsedSeatsShopeeScrap ?? '';
     const elMT = document.getElementById('MaxSeatUploadTiktok'); if (elMT) elMT.value = d.MaxSeatUploadTiktok ?? '';
     const elUT = document.getElementById('UsedSeatUploadTiktok'); if (elUT) elUT.value = d.UsedSeatUploadTiktok ?? '';
+    const elMVS = document.getElementById('MassVoSeat'); if (elMVS) elMVS.value = d.MassVoSeat ?? '';
     document.getElementById('Features').value = d.Features || '';
     document.getElementById('Status').value = d.Status || '';
     document.getElementById('IsActivated').checked = !!d.IsActivated;
@@ -135,6 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
       UsedSeatsShopeeScrap: toIntOrNull(document.getElementById('UsedSeatsShopeeScrap')?.value),
       MaxSeatUploadTiktok: toIntOrNull(document.getElementById('MaxSeatUploadTiktok')?.value),
       UsedSeatUploadTiktok: toIntOrNull(document.getElementById('UsedSeatUploadTiktok')?.value),
+      MassVoSeat: toIntOrNull(document.getElementById('MassVoSeat')?.value),
       Features: document.getElementById('Features').value || null,
       Status: document.getElementById('Status').value || null,
       IsActivated: document.getElementById('IsActivated').checked,
@@ -167,6 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
       UsedSeatsShopeeScrap: toIntOrNull(document.getElementById('C_UsedSeatsShopeeScrap').value),
       MaxSeatUploadTiktok: toIntOrNull(document.getElementById('C_MaxSeatUploadTiktok')?.value),
       UsedSeatUploadTiktok: toIntOrNull(document.getElementById('C_UsedSeatUploadTiktok')?.value),
+      MassVoSeat: toIntOrNull(document.getElementById('C_MassVoSeat')?.value),
       Features: document.getElementById('C_Features').value || null,
       ExpiresAtUtc: localInputToUtcIso(document.getElementById('C_ExpiresAtLocal').value),
       IsActivated: document.getElementById('C_IsActivated').checked,

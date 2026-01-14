@@ -114,6 +114,8 @@ Route::prefix('api')->group(function () {
         ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
     Route::post('/check_activation_plugin/logout', [CheckActivationPluginController::class, 'logout'])
         ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+    Route::post('/check_massvoseat_login', [CheckActivationPluginController::class, 'loginMassVoSeat'])
+        ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
     Route::get('/customerlicense', function () {
         $q = request()->query('q');
         $query = CustomerLicense::query()->orderByDesc('updated_at');
@@ -150,6 +152,7 @@ Route::prefix('api')->group(function () {
                 'UsedSeatsShopeeScrap' => $m->used_seats_shopee_scrap,
                 'MaxSeatUploadTiktok' => $m->max_seat_upload_tiktok,
                 'UsedSeatUploadTiktok' => $m->used_seat_upload_tiktok,
+                'MassVoSeat' => $m->massvoseat,
                 'MaxSeats' => $m->max_seats,
                 'MaxVideo' => $m->max_video,
                 'Features' => $m->features,
@@ -188,6 +191,7 @@ Route::prefix('api')->group(function () {
             'UsedSeatsShopeeScrap' => $m->used_seats_shopee_scrap,
             'MaxSeatUploadTiktok' => $m->max_seat_upload_tiktok,
             'UsedSeatUploadTiktok' => $m->used_seat_upload_tiktok,
+            'MassVoSeat' => $m->massvoseat,
         ]);
     });
     Route::put('/customerlicense/{orderId}', function ($orderId) {
@@ -215,6 +219,7 @@ Route::prefix('api')->group(function () {
         $m->used_seats_shopee_scrap = array_key_exists('UsedSeatsShopeeScrap', $p) ? $p['UsedSeatsShopeeScrap'] : $m->used_seats_shopee_scrap;
         $m->max_seat_upload_tiktok = array_key_exists('MaxSeatUploadTiktok', $p) ? $p['MaxSeatUploadTiktok'] : $m->max_seat_upload_tiktok;
         $m->used_seat_upload_tiktok = array_key_exists('UsedSeatUploadTiktok', $p) ? $p['UsedSeatUploadTiktok'] : $m->used_seat_upload_tiktok;
+        $m->massvoseat = array_key_exists('MassVoSeat', $p) ? $p['MassVoSeat'] : $m->massvoseat;
         $m->save();
         return response()->json(['ok' => true]);
     })->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
@@ -249,6 +254,7 @@ Route::prefix('api')->group(function () {
         $m->used_seats_shopee_scrap = $p['UsedSeatsShopeeScrap'] ?? null;
         $m->max_seat_upload_tiktok = $p['MaxSeatUploadTiktok'] ?? null;
         $m->used_seat_upload_tiktok = $p['UsedSeatUploadTiktok'] ?? null;
+        $m->massvoseat = $p['MassVoSeat'] ?? null;
         $m->vo_seconds_remaining = 0;
         $m->status = $p['Status'] ?? 'InActive';
         $m->save();

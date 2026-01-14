@@ -15,7 +15,7 @@ class CustomerLicense extends Model
         'tenor_days','is_activated','activation_date_utc','expires_at_utc','machine_id',
         'max_seats','max_video','features','vo_seconds_remaining','status','delivery_status','delivery_log',
         'version','last_used','device_id','max_seats_shopee_scrap','used_seats_shopee_scrap',
-        'max_seat_upload_tiktok','used_seat_upload_tiktok'
+        'max_seat_upload_tiktok','used_seat_upload_tiktok','massvoseat'
     ];
 
     protected $casts = [

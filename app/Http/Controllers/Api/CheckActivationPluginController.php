@@ -245,4 +245,56 @@ class CheckActivationPluginController extends Controller
             'used_seats' => $usedSeats
         ]);
     }
+
+    public function loginMassVoSeat(Request $request)
+    {
+        $licenseKey = $request->input('license_key');
+
+        if (!$licenseKey) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'License Key is required.'
+            ], 400);
+        }
+
+        $license = CustomerLicense::where('license_key', $licenseKey)->first();
+
+        if (!$license) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'License key not found.'
+            ], 404);
+        }
+
+        if (!$license->is_activated) {
+             return response()->json([
+                'ok' => false,
+                'message' => 'License is not activated.'
+            ], 403);
+        }
+
+        if ($license->expires_at_utc && Carbon::parse($license->expires_at_utc)->isPast()) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'License expired.'
+            ], 403);
+        }
+
+        if ($license->massvoseat != 1) {
+             return response()->json([
+                'ok' => false,
+                'message' => 'MassVoSeat feature is not enabled for this license.'
+            ], 403);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Login successful.',
+            'data' => [
+                'license_key' => $license->license_key,
+                'owner' => $license->owner,
+                'expires_at' => $license->expires_at_utc,
+            ]
+        ]);
+    }
 }
